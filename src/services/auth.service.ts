@@ -21,6 +21,7 @@ export const register = async (data: RegisterRequest): Promise<RegisterResponse>
     API_CONFIG.ENDPOINTS.AUTH.REGISTER,
     data
   );
+  console.log('회원가입 데이터 :', response)
   return response.data;
 };
 
