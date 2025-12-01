@@ -14,23 +14,14 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 interface PetSuccessScreenProps {
-  onNavigateBack: () => void;
-  onNavigateNext: () => void;
+  onNavigateToHome: () => void;
 }
 
 const PetSuccessScreen = ({
-  onNavigateBack,
-  onNavigateNext,
+  onNavigateToHome,
 }: PetSuccessScreenProps) => {
   return (
     <View style={styles.container}>
-      {/* 헤더 */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onNavigateBack} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={28} color="#333" />
-        </TouchableOpacity>
-      </View>
-
       {/* 컨텐츠 */}
       <View style={styles.content}>
         {/* 성공 아이콘 */}
@@ -46,9 +37,9 @@ const PetSuccessScreen = ({
       <View style={styles.bottomContainer}>
         <TouchableOpacity
           style={styles.nextButton}
-          onPress={onNavigateNext}
+          onPress={onNavigateToHome}
         >
-          <Text style={styles.nextButtonText}>다음으로</Text>
+          <Text style={styles.nextButtonText}>홈으로 이동</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -59,16 +50,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-  },
-  header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
   },
   content: {
     flex: 1,

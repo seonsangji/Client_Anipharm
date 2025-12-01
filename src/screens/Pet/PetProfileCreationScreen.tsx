@@ -27,6 +27,35 @@ import {
   HEALTH_CONCERN_LABELS,
 } from '../../types/pet.types';
 
+// 웹용 날짜 입력 컴포넌트
+const WebDateInput = ({ value, onChange, hasError, disabled }: any) => {
+  if (Platform.OS !== 'web') return null;
+
+  return (
+    <input
+      type="date"
+      value={value || ''}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      style={{
+        width: '100%',
+        height: '52px',
+        border: hasError ? '1.5px solid #FF4444' : '1px solid #E0E0E0',
+        borderRadius: '12px',
+        padding: '0 16px',
+        fontSize: '16px',
+        backgroundColor: disabled ? '#F5F5F5' : '#fff',
+        color: disabled ? '#999' : '#000',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        boxSizing: 'border-box',
+        outline: 'none',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+      }}
+      max={new Date().toISOString().split('T')[0]}
+    />
+  );
+};
+
 interface PetProfileCreationScreenProps {
   onNavigateBack: () => void;
   onNavigateToSuccess: () => void;
@@ -276,28 +305,46 @@ const PetProfileCreationScreen = ({
           {/* 생년월일 */}
           <View style={styles.section}>
             <Text style={styles.label}>생년월일</Text>
-            <TouchableOpacity
-              style={[styles.dateInput, birthDateError ? styles.inputError : null]}
-              onPress={openDatePicker}
-              disabled={loading}
-            >
-              <Text style={[styles.dateText, !birthDate && styles.placeholder]}>
-                {birthDate || 'YYYY-MM-DD'}
-              </Text>
-              <Ionicons name="calendar-outline" size={20} color="#999" />
-            </TouchableOpacity>
-            {birthDateError ? <Text style={styles.errorText}>{birthDateError}</Text> : null}
 
-            {/* DateTimePicker */}
-            {showDatePicker && (
-              <DateTimePicker
-                value={date}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={onDateChange}
-                maximumDate={new Date()}
+            {Platform.OS === 'web' ? (
+              /* 웹용 날짜 입력 */
+              <WebDateInput
+                value={birthDate}
+                onChange={(value: string) => {
+                  setBirthDate(value);
+                  setBirthDateError('');
+                }}
+                hasError={!!birthDateError}
+                disabled={loading}
               />
+            ) : (
+              /* 네이티브용 날짜 입력 */
+              <>
+                <TouchableOpacity
+                  style={[styles.dateInput, birthDateError ? styles.inputError : null]}
+                  onPress={openDatePicker}
+                  disabled={loading}
+                >
+                  <Text style={[styles.dateText, !birthDate && styles.placeholder]}>
+                    {birthDate || 'YYYY-MM-DD'}
+                  </Text>
+                  <Ionicons name="calendar-outline" size={20} color="#999" />
+                </TouchableOpacity>
+
+                {/* DateTimePicker */}
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={date}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={onDateChange}
+                    maximumDate={new Date()}
+                  />
+                )}
+              </>
             )}
+
+            {birthDateError ? <Text style={styles.errorText}>{birthDateError}</Text> : null}
           </View>
 
           {/* 종류 */}

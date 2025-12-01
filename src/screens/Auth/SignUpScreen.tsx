@@ -175,7 +175,8 @@ const SignUpScreen = ({ onNavigateToLogin }: SignUpScreenProps) => {
         setNicknameError('');
         break;
       case 'email':
-        // 첫 화면에서는 뒤로가기 없음
+        // 첫 화면(이메일 단계)에서는 로그인 화면으로 이동
+        onNavigateToLogin();
         break;
     }
   };
@@ -198,17 +199,18 @@ const SignUpScreen = ({ onNavigateToLogin }: SignUpScreenProps) => {
 
       if (response.success) {
         Alert.alert(
-          '회원가입 성공',
-          response.message,
+          '🎉 회원가입 성공',
+          '회원가입이 완료되었습니다.\n로그인 후 Anipharm의 다양한 서비스를 이용해보세요!',
           [
             {
-              text: '확인',
+              text: '로그인하러 가기',
               onPress: () => {
                 // 로그인 화면으로 이동
                 onNavigateToLogin();
               },
             },
-          ]
+          ],
+          { cancelable: false }
         );
       }
     } catch (error: any) {
@@ -450,7 +452,9 @@ const SignUpScreen = ({ onNavigateToLogin }: SignUpScreenProps) => {
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.nextButtonText}>다음으로</Text>
+            <Text style={styles.nextButtonText}>
+              {currentStep === 'nickname' ? '가입하기' : '다음으로'}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
