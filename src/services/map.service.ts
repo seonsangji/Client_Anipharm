@@ -33,8 +33,8 @@ class MapService {
    * @returns 검색된 장소 목록
    */
   async searchByCategory(
-    category: MapCategory,
-    options?: SearchOptions
+    category: MapCategory | 'all',
+    options?: SearchOptions & { keyword?: string }
   ): Promise<Place[]> {
     try {
       const params: any = { category };
@@ -44,9 +44,10 @@ class MapService {
       if (options?.longitude) params.longitude = options.longitude.toString();
       if (options?.display) params.display = options.display.toString();
       if (options?.start) params.start = options.start.toString();
+      if (options?.keyword) params.keyword = options.keyword; // 키워드 검색 지원
 
       const response = await apiClient.get<Place[]>('/map/search', { params });
-      console.log(response.data);
+      console.log('장소 검색 결과:', response.data);
       return response.data;
     } catch (error: any) {
       throw new Error(

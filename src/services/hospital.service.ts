@@ -36,6 +36,7 @@ class HospitalService {
           },
         }
       );
+      console.log('주변 병원 데이터:', response.data);
       return response.data.data;
     } catch (error: any) {
       throw new Error(

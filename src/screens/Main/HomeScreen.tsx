@@ -105,18 +105,43 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
 
   // 카테고리별 장소 검색
   useEffect(() => {
-    if (selectedCategory !== 'all' && currentLocation) {
-      loadPlaces(selectedCategory);
+    if (currentLocation) {
+      if (selectedCategory === 'all') {
+        // "전체" 카테고리 선택 시 "동물" 키워드로 검색
+        loadPlaces('all');
+      } else {
+        loadPlaces(selectedCategory);
+      }
     }
   }, [selectedCategory, currentLocation]);
 
   // 장소 검색 함수
-  const loadPlaces = async (category: MapCategory) => {
+  const loadPlaces = async (category: MapCategory | 'all') => {
     try {
       setLoading(true);
       
+      // "전체" 카테고리는 Naver API로 "동물" 키워드 검색
+      if (category === 'all' && currentLocation) {
+        const options = {
+          keyword: '동물',
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude,
+          display: 30, // 더 많은 결과 표시
+        };
+        
+        const results = await mapService.searchByCategory('all', options);
+        setPlaces(results);
+        setHospitals([]);
+        setPharmacies([]);
+        if (results.length > 0) {
+          setSelectedPlace(results[0]);
+          setSelectedHospital(null);
+          setSelectedPharmacy(null);
+        } else {
+          setSelectedPlace(null);
+        }
+      } else if (category === 'hospital' && currentLocation) {
       // 동물병원 카테고리는 DB에서 검색
-      if (category === 'hospital' && currentLocation) {
         const results = await hospitalService.findNearby(
           currentLocation.latitude,
           currentLocation.longitude,
@@ -149,8 +174,33 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
         } else {
           setSelectedPharmacy(null);
         }
+      } else if (category === 'hotel' || category === 'grooming' || category === 'petshop') {
+        // 펫호텔, 미용, 애완용품은 Naver API로 "동물" 키워드 검색
+        const options = currentLocation
+          ? {
+              keyword: '동물',
+              latitude: currentLocation.latitude,
+              longitude: currentLocation.longitude,
+              display: 30,
+            }
+          : { 
+              keyword: '동물',
+              display: 30 
+            };
+        
+        const results = await mapService.searchByCategory(category, options);
+        setPlaces(results);
+        setHospitals([]);
+        setPharmacies([]);
+        if (results.length > 0) {
+          setSelectedPlace(results[0]);
+          setSelectedHospital(null);
+          setSelectedPharmacy(null);
+        } else {
+          setSelectedPlace(null);
+        }
       } else {
-        // 다른 카테고리는 Naver API에서 검색
+        // 기타 카테고리는 Naver API에서 검색 (기본 동작)
         const options = currentLocation
           ? {
               latitude: currentLocation.latitude,
@@ -251,11 +301,10 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
   // 카테고리 필터 변경
   const handleCategoryChange = (category: MapCategory | 'all') => {
     setSelectedCategory(category);
+    // 'all' 카테고리는 loadPlaces에서 처리되므로 여기서는 초기화만
     if (category === 'all') {
-      setPlaces([]);
-      setHospitals([]);
-      setSelectedPlace(null);
-      setSelectedHospital(null);
+      setPharmacies([]);
+      setSelectedPharmacy(null);
     }
   };
 
@@ -327,6 +376,22 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
       const script = `
         if (window.map) {
           window.map.setCenter(new naver.maps.LatLng(${pharmacy.latitude}, ${pharmacy.longitude}));
+          window.map.setZoom(16);
+        }
+      `;
+      webViewRef.current.injectJavaScript(script);
+    }
+  };
+
+  const handlePlaceSelect = (place: Place) => {
+    setSelectedPlace(place);
+    setSelectedHospital(null);
+    setSelectedPharmacy(null);
+    // 지도 중심 이동 (WebView 사용 시)
+    if (webViewRef.current && place.latitude && place.longitude) {
+      const script = `
+        if (window.map) {
+          window.map.setCenter(new naver.maps.LatLng(${place.latitude}, ${place.longitude}));
           window.map.setZoom(16);
         }
       `;
@@ -826,7 +891,8 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
 
       {/* 뷰 모드 전환 버튼 */}
       {((selectedCategory === 'hospital' && hospitals.length > 0) || 
-        (selectedCategory === 'pharmacy' && pharmacies.length > 0)) && (
+        (selectedCategory === 'pharmacy' && pharmacies.length > 0) ||
+        ((selectedCategory === 'all' || selectedCategory === 'hotel' || selectedCategory === 'grooming' || selectedCategory === 'petshop') && places.length > 0)) && (
         <View style={styles.viewModeContainer}>
           <TouchableOpacity
             style={[styles.viewModeButton, mapViewMode === 'map' && styles.viewModeButtonActive]}
@@ -857,9 +923,7 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
               <ActivityIndicator size="large" color="#FF8A3D" />
               <Text style={styles.mapLoadingText}>장소를 불러오는 중...</Text>
             </View>
-          ) : ((selectedCategory === 'hospital' && hospitals.length > 0) || 
-               (selectedCategory === 'pharmacy' && pharmacies.length > 0) ||
-               (selectedCategory !== 'all' && selectedCategory !== 'hospital' && selectedCategory !== 'pharmacy' && places.length > 0)) && currentLocation ? (
+          ) : currentLocation ? (
             Platform.OS === 'web' ? (
               // 웹 환경: 직접 Naver 지도 렌더링
               <View 
@@ -908,7 +972,7 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
                     } else if (data.type === 'placeClick') {
                       const place = places.find(p => p.id === data.placeId);
                       if (place) {
-                        setSelectedPlace(place);
+                        handlePlaceSelect(place);
                         // 네이버 지도 앱으로 열기
                         if (data.latitude && data.longitude && data.name) {
                           openNaverMap(data.name, data.latitude, data.longitude);
@@ -926,7 +990,9 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
         <Ionicons name="map-outline" size={60} color="#FF8A3D" />
               <Text style={styles.mapPlaceholderText}>
                 {selectedCategory === 'all'
-                  ? '카테고리를 선택해주세요'
+                  ? places.length > 0
+                    ? `${places.length}개의 동물 관련 장소를 찾았습니다`
+                    : '동물 관련 장소를 검색 중...'
                   : selectedCategory === 'hospital'
                   ? hospitals.length === 0
                     ? '동물병원을 찾을 수 없습니다'
@@ -1054,6 +1120,49 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
                       <View style={styles.hospitalListDetailItem}>
                         <Ionicons name="call-outline" size={14} color="#999" />
                         <Text style={styles.hospitalListDetailText}>{item.phone}</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              )}
+              contentContainerStyle={styles.hospitalListContent}
+            />
+          ) : ((selectedCategory === 'all' || selectedCategory === 'hotel' || selectedCategory === 'grooming' || selectedCategory === 'petshop') && places.length > 0) ? (
+            <FlatList
+              data={places}
+              keyExtractor={(item, index) => item.id || `place_${index}`}
+              renderItem={({ item, index }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.hospitalListItem,
+                    selectedPlace?.id === item.id && styles.hospitalListItemSelected
+                  ]}
+                  onPress={() => handlePlaceSelect(item)}
+                >
+                  <View style={styles.hospitalListHeader}>
+                    <View style={styles.hospitalListNumber}>
+                      <Text style={styles.hospitalListNumberText}>{index + 1}</Text>
+                    </View>
+                    <View style={styles.hospitalListInfo}>
+                      <Text style={styles.hospitalListName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.hospitalListAddress} numberOfLines={1}>
+                        {item.address || item.roadAddress || ''}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.hospitalListDetails}>
+                    {item.telephone && (
+                      <View style={styles.hospitalListDetailItem}>
+                        <Ionicons name="call-outline" size={14} color="#999" />
+                        <Text style={styles.hospitalListDetailText}>{item.telephone}</Text>
+                      </View>
+                    )}
+                    {item.category && (
+                      <View style={styles.hospitalListDetailItem}>
+                        <Ionicons name="pricetag-outline" size={14} color="#999" />
+                        <Text style={styles.hospitalListDetailText}>{item.category}</Text>
                       </View>
                     )}
                   </View>
@@ -1236,7 +1345,9 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
             <Ionicons name="location-outline" size={40} color="#999" />
             <Text style={styles.emptyCardText}>
               {selectedCategory === 'all'
-                ? '카테고리를 선택하여 장소를 검색하세요'
+                ? places.length === 0
+                  ? '동물 관련 장소를 검색 중...'
+                  : '검색 결과가 없습니다'
                 : '검색 결과가 없습니다'}
             </Text>
           </View>

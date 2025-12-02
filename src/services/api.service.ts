@@ -5,6 +5,7 @@
 
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { API_CONFIG } from '../config/api.config';
+import { getToken, clearAuthData } from '../utils/storage';
 
 // Axios 인스턴스 생성
 const apiClient: AxiosInstance = axios.create({
@@ -18,11 +19,10 @@ const apiClient: AxiosInstance = axios.create({
 // 요청 인터셉터: 모든 요청에 토큰 추가
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    // TODO: AsyncStorage에서 토큰을 가져와서 헤더에 추가
-    // const token = await AsyncStorage.getItem('authToken');
-    // if (token && config.headers) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    const token = await getToken();
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => {
@@ -42,9 +42,13 @@ apiClient.interceptors.response.use(
 
       switch (status) {
         case 401:
-          // 인증 실패 - 로그인 화면으로 이동
-          // TODO: 로그인 화면으로 네비게이션
+          // 인증 실패 - 토큰 삭제 및 로그아웃 처리
           console.log('인증 실패: 로그인이 필요합니다.');
+          await clearAuthData();
+          // 로그아웃 이벤트 발생 (App.tsx에서 처리)
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('auth:logout'));
+          }
           break;
         case 403:
           // 권한 없음
