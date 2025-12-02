@@ -17,6 +17,7 @@ import {
   Alert,
   FlatList,
   Dimensions,
+  Linking,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,8 +25,10 @@ import * as Location from 'expo-location';
 import { User } from '../../types/auth.types';
 import mapService from '../../services/map.service';
 import hospitalService from '../../services/hospital.service';
+import pharmacyService from '../../services/pharmacy.service';
 import { Place, MapCategory } from '../../types/map.types';
 import { VeterinaryHospital } from '../../types/hospital.types';
+import { VeterinaryPharmacy } from '../../types/pharmacy.types';
 import { NAVER_MAP_CLIENT_ID } from '../../config/api.config';
 
 type TabType = 'home' | 'community' | 'chatbot' | 'journal' | 'profile';
@@ -42,8 +45,10 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
   const [selectedCategory, setSelectedCategory] = useState<MapCategory | 'all'>('all');
   const [places, setPlaces] = useState<Place[]>([]);
   const [hospitals, setHospitals] = useState<VeterinaryHospital[]>([]);
+  const [pharmacies, setPharmacies] = useState<VeterinaryPharmacy[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [selectedHospital, setSelectedHospital] = useState<VeterinaryHospital | null>(null);
+  const [selectedPharmacy, setSelectedPharmacy] = useState<VeterinaryPharmacy | null>(null);
   const [loading, setLoading] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [mapViewMode, setMapViewMode] = useState<'map' | 'list'>('map'); // 지도/리스트 뷰 모드
@@ -119,11 +124,30 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
         );
         setHospitals(results);
         setPlaces([]);
+        setPharmacies([]);
         if (results.length > 0) {
           setSelectedHospital(results[0]);
           setSelectedPlace(null);
+          setSelectedPharmacy(null);
         } else {
           setSelectedHospital(null);
+        }
+      } else if (category === 'pharmacy' && currentLocation) {
+        // 동물약국 카테고리는 DB에서 검색
+        const results = await pharmacyService.findNearby(
+          currentLocation.latitude,
+          currentLocation.longitude,
+          5 // 5km 반경
+        );
+        setPharmacies(results);
+        setPlaces([]);
+        setHospitals([]);
+        if (results.length > 0) {
+          setSelectedPharmacy(results[0]);
+          setSelectedPlace(null);
+          setSelectedHospital(null);
+        } else {
+          setSelectedPharmacy(null);
         }
       } else {
         // 다른 카테고리는 Naver API에서 검색
@@ -138,9 +162,11 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
         const results = await mapService.searchByCategory(category, options);
         setPlaces(results);
         setHospitals([]);
+        setPharmacies([]);
         if (results.length > 0) {
           setSelectedPlace(results[0]);
           setSelectedHospital(null);
+          setSelectedPharmacy(null);
         } else {
           setSelectedPlace(null);
         }
@@ -153,6 +179,7 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
   };
 
   // 검색어로 주소 검색
+  // 네이버 지도 검색 (키워드 검색)
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
       Alert.alert('알림', '검색어를 입력해주세요.');
@@ -161,18 +188,61 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
 
     try {
       setLoading(true);
-      const geocodeResult = await mapService.geocode(searchQuery);
-      setCurrentLocation({
-        latitude: geocodeResult.latitude,
-        longitude: geocodeResult.longitude,
-      });
       
-      // 검색한 위치 기준으로 장소 검색
-      if (selectedCategory !== 'all') {
-        await loadPlaces(selectedCategory);
+      // 네이버 지도 검색 API 사용 (카테고리 없이 키워드 검색)
+      // 'all' 카테고리로 검색하거나, 현재 선택된 카테고리로 검색
+      const searchCategory = selectedCategory === 'all' ? 'hospital' : selectedCategory;
+      
+      const options = currentLocation
+        ? {
+            region: searchQuery, // 검색어를 지역으로 사용
+            latitude: currentLocation.latitude,
+            longitude: currentLocation.longitude,
+            display: 20,
+          }
+        : {
+            region: searchQuery,
+            display: 20,
+          };
+      
+      const results = await mapService.searchByCategory(searchCategory as MapCategory, options);
+      
+      if (searchCategory === 'hospital') {
+        setHospitals([]);
+        setPlaces([]);
+        // 병원 검색 결과를 hospitals 형식으로 변환
+        const hospitalResults = results.map((place, index) => ({
+          hospitalId: index + 1,
+          name: place.name,
+          address: place.address || place.roadAddress || '',
+          latitude: place.latitude || 0,
+          longitude: place.longitude || 0,
+          is24h: false,
+          isEmergency: false,
+          ratingAverage: 0,
+          reviewCount: 0,
+        }));
+        setHospitals(hospitalResults);
+        if (hospitalResults.length > 0) {
+          setSelectedHospital(hospitalResults[0]);
+        }
+      } else {
+        setPlaces(results);
+        setHospitals([]);
+        if (results.length > 0) {
+          setSelectedPlace(results[0]);
+        }
+      }
+      
+      // 검색 결과가 있으면 첫 번째 결과 위치로 지도 이동
+      if (results.length > 0 && results[0].latitude && results[0].longitude) {
+        setCurrentLocation({
+          latitude: results[0].latitude,
+          longitude: results[0].longitude,
+        });
       }
     } catch (error: any) {
-      Alert.alert('오류', error.message || '주소를 찾을 수 없습니다.');
+      Alert.alert('오류', error.message || '검색 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -190,6 +260,36 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
   };
 
   // 병원 선택 핸들러
+  // 네이버 지도 앱으로 열기
+  const openNaverMap = async (name: string, latitude: number, longitude: number) => {
+    try {
+      let url = '';
+      
+      if (Platform.OS === 'ios') {
+        // iOS: 네이버 지도 앱 URL
+        url = `nmap://search?query=${encodeURIComponent(name)}&appname=com.anonymous.Client-Anipharm`;
+      } else if (Platform.OS === 'android') {
+        // Android: 네이버 지도 앱 Intent
+        url = `intent://search?query=${encodeURIComponent(name)}#Intent;scheme=nmap;package=com.nhn.android.nmap;end`;
+      } else {
+        // Web: 네이버 지도 웹 URL
+        url = `https://map.naver.com/v5/search/${encodeURIComponent(name)}`;
+      }
+      
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        // 앱이 설치되지 않은 경우 웹으로 열기
+        const webUrl = `https://map.naver.com/v5/search/${encodeURIComponent(name)}`;
+        await Linking.openURL(webUrl);
+      }
+    } catch (error) {
+      console.error('네이버 지도 열기 실패:', error);
+      Alert.alert('오류', '네이버 지도를 열 수 없습니다.');
+    }
+  };
+
   const handleHospitalSelect = (hospital: VeterinaryHospital) => {
     setSelectedHospital(hospital);
     // 지도 중심 이동 (WebView 사용 시)
@@ -220,18 +320,33 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
     }
   };
 
+  const handlePharmacySelect = (pharmacy: VeterinaryPharmacy) => {
+    setSelectedPharmacy(pharmacy);
+    // 지도 중심 이동 (WebView 사용 시)
+    if (webViewRef.current && pharmacy.latitude && pharmacy.longitude) {
+      const script = `
+        if (window.map) {
+          window.map.setCenter(new naver.maps.LatLng(${pharmacy.latitude}, ${pharmacy.longitude}));
+          window.map.setZoom(16);
+        }
+      `;
+      webViewRef.current.injectJavaScript(script);
+    }
+  };
+
   // Naver 지도 HTML 생성 (모든 플랫폼용)
   const generateMapHTML = () => {
     if (!currentLocation) return '';
     
     const naverClientId = NAVER_MAP_CLIENT_ID;
     
-    const markersScript = hospitals.map((hospital, index) => {
+    // 병원 마커 스크립트
+    const hospitalMarkersScript = hospitals.map((hospital, index) => {
       if (!hospital.latitude || !hospital.longitude) return '';
       const isSelected = selectedHospital?.hospitalId === hospital.hospitalId;
       const hospitalName = hospital.name.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
       return `
-        var marker${index} = new naver.maps.Marker({
+        var hospitalMarker${index} = new naver.maps.Marker({
           position: new naver.maps.LatLng(${hospital.latitude}, ${hospital.longitude}),
           map: window.map,
           title: '${hospitalName}',
@@ -240,18 +355,87 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
             anchor: new naver.maps.Point(0.5, 0.5)
           }
         });
-        marker${index}.addListener('click', function() {
+        hospitalMarker${index}.addListener('click', function() {
           if (window.ReactNativeWebView) {
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'markerClick',
-              hospitalId: ${hospital.hospitalId}
+              hospitalId: ${hospital.hospitalId},
+              name: '${hospitalName}',
+              latitude: ${hospital.latitude},
+              longitude: ${hospital.longitude}
             }));
           } else {
             // 웹 환경에서 직접 처리
             handleMarkerClick(${hospital.hospitalId});
           }
         });
-        window.markers.push(marker${index});
+        window.markers.push(hospitalMarker${index});
+      `;
+    }).join('\n');
+
+    // 약국 마커 스크립트
+    const pharmacyMarkersScript = pharmacies.map((pharmacy, index) => {
+      if (!pharmacy.latitude || !pharmacy.longitude) return '';
+      const isSelected = selectedPharmacy?.pharmacyId === pharmacy.pharmacyId;
+      const pharmacyName = pharmacy.name.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
+      return `
+        var pharmacyMarker${index} = new naver.maps.Marker({
+          position: new naver.maps.LatLng(${pharmacy.latitude}, ${pharmacy.longitude}),
+          map: window.map,
+          title: '${pharmacyName}',
+          icon: {
+            content: '<div style="background-color: ${isSelected ? '#FF8A3D' : '#9C27B0'}; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${index + 1}</div>',
+            anchor: new naver.maps.Point(0.5, 0.5)
+          }
+        });
+        pharmacyMarker${index}.addListener('click', function() {
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'pharmacyClick',
+              pharmacyId: ${pharmacy.pharmacyId},
+              name: '${pharmacyName}',
+              latitude: ${pharmacy.latitude},
+              longitude: ${pharmacy.longitude}
+            }));
+          } else {
+            // 웹 환경에서 직접 처리
+            handlePharmacyClick(${pharmacy.pharmacyId});
+          }
+        });
+        window.markers.push(pharmacyMarker${index});
+      `;
+    }).join('\n');
+
+    // 장소 마커 스크립트
+    const placeMarkersScript = places.map((place, index) => {
+      if (!place.latitude || !place.longitude) return '';
+      const isSelected = selectedPlace?.id === place.id;
+      const placeName = place.name.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
+      return `
+        var placeMarker${index} = new naver.maps.Marker({
+          position: new naver.maps.LatLng(${place.latitude}, ${place.longitude}),
+          map: window.map,
+          title: '${placeName}',
+          icon: {
+            content: '<div style="background-color: ${isSelected ? '#FF8A3D' : '#2196F3'}; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${index + 1}</div>',
+            anchor: new naver.maps.Point(0.5, 0.5)
+          }
+        });
+        placeMarker${index}.addListener('click', function() {
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'placeClick',
+              placeId: '${place.id}',
+              name: '${placeName}',
+              latitude: ${place.latitude},
+              longitude: ${place.longitude}
+            }));
+          } else {
+            // 웹 환경에서 직접 처리
+            handlePlaceClick('${place.id}');
+          }
+        });
+        window.markers.push(placeMarker${index});
       `;
     }).join('\n');
 
@@ -272,9 +456,16 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
           window.markers = [];
           
           function handleMarkerClick(hospitalId) {
-            // 웹 환경에서의 마커 클릭 처리
+            // 웹 환경에서의 병원 마커 클릭 처리
             if (window.onMarkerClick) {
               window.onMarkerClick(hospitalId);
+            }
+          }
+          
+          function handlePlaceClick(placeId) {
+            // 웹 환경에서의 장소 마커 클릭 처리
+            if (window.onPlaceClick) {
+              window.onPlaceClick(placeId);
             }
           }
           
@@ -287,7 +478,9 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
             }
           });
           
-          ${markersScript}
+          ${hospitalMarkersScript}
+          ${pharmacyMarkersScript}
+          ${placeMarkersScript}
           
           // 현재 위치 마커
           var currentMarker = new naver.maps.Marker({
@@ -305,16 +498,21 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
     `;
   };
 
-  // 웹용 Naver 지도 초기화
+  // 웹용 Naver 지도 초기화 (모든 탭에서 작동)
   useEffect(() => {
-    if (Platform.OS === 'web' && selectedCategory === 'hospital' && hospitals.length > 0 && currentLocation) {
+    if (Platform.OS === 'web' && currentLocation) {
       // 웹 환경에서만 실행
       if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         // Naver 지도 스크립트가 이미 로드되었는지 확인
         if ((window as any).naver && (window as any).naver.maps) {
           // 약간의 지연 후 초기화 (DOM이 준비될 때까지)
           setTimeout(() => {
-            initializeWebMap();
+              if (activeTab === 'home' && (hospitals.length > 0 || pharmacies.length > 0 || places.length > 0)) {
+                initializeWebMap();
+              } else if (activeTab !== 'home') {
+              // 다른 탭의 지도 초기화
+              initializeWebMapForTab(activeTab);
+            }
           }, 100);
         } else {
           // Naver 지도 스크립트 로드
@@ -325,7 +523,12 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
           script.onload = () => {
             // 스크립트 로드 후 약간의 지연 후 초기화
             setTimeout(() => {
-              initializeWebMap();
+              if (activeTab === 'home' && (hospitals.length > 0 || pharmacies.length > 0 || places.length > 0)) {
+                initializeWebMap();
+              } else if (activeTab !== 'home') {
+                // 다른 탭의 지도 초기화
+                initializeWebMapForTab(activeTab);
+              }
             }, 100);
           };
 
@@ -343,25 +546,25 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
         }
       }
     }
-  }, [hospitals, currentLocation, selectedCategory, selectedHospital]);
+  }, [hospitals, pharmacies, places, currentLocation, selectedCategory, selectedHospital, selectedPharmacy, selectedPlace, activeTab]);
 
-  const initializeWebMap = () => {
-    if (!currentLocation || hospitals.length === 0) return;
+  // 웹 환경에서 다른 탭의 지도 초기화
+  const initializeWebMapForTab = (tabName: string) => {
+    if (!currentLocation) return;
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
     if (!(window as any).naver || !(window as any).naver.maps) return;
     
-    const mapElement = document.getElementById('naver-map');
+    const mapElement = document.getElementById(`naver-map-${tabName}`);
     if (!mapElement) {
-      console.warn('naver-map 요소를 찾을 수 없습니다.');
-      return;
+      return; // 해당 탭의 지도 요소가 없으면 무시
     }
 
     // 기존 지도 제거
     mapElement.innerHTML = '';
 
     try {
-      // 지도 초기화
-      const map = new (window as any).naver.maps.Map('naver-map', {
+      // 지도 초기화 (마커 없이)
+      const map = new (window as any).naver.maps.Map(`naver-map-${tabName}`, {
         center: new (window as any).naver.maps.LatLng(currentLocation.latitude, currentLocation.longitude),
         zoom: 14,
         zoomControl: true,
@@ -370,26 +573,7 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
         },
       });
 
-      // 마커 생성
-      hospitals.forEach((hospital, index) => {
-        if (!hospital.latitude || !hospital.longitude) return;
-        const isSelected = selectedHospital?.hospitalId === hospital.hospitalId;
-        const marker = new (window as any).naver.maps.Marker({
-          position: new (window as any).naver.maps.LatLng(hospital.latitude, hospital.longitude),
-          map: map,
-          title: hospital.name,
-          icon: {
-            content: `<div style="background-color: ${isSelected ? '#FF8A3D' : '#4CAF50'}; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${index + 1}</div>`,
-            anchor: new (window as any).naver.maps.Point(0.5, 0.5),
-          },
-        });
-
-        (window as any).naver.maps.Event.addListener(marker, 'click', () => {
-          handleHospitalSelect(hospital);
-        });
-      });
-
-      // 현재 위치 마커
+      // 현재 위치 마커만 표시
       new (window as any).naver.maps.Marker({
         position: new (window as any).naver.maps.LatLng(currentLocation.latitude, currentLocation.longitude),
         map: map,
@@ -401,6 +585,117 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
     } catch (error) {
       console.error('Naver 지도 초기화 오류:', error);
     }
+  };
+
+  const initializeWebMap = () => {
+    if (!currentLocation) return;
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    if (!(window as any).naver || !(window as any).naver.maps) return;
+    
+    // React Native Web에서 nativeID는 id로 변환되므로 약간의 지연 후 찾기
+    setTimeout(() => {
+      const mapElement = document.getElementById('naver-map');
+      if (!mapElement) {
+        console.warn('naver-map 요소를 찾을 수 없습니다.');
+        return;
+      }
+
+      // 기존 지도 제거
+      mapElement.innerHTML = '';
+
+      try {
+        // 지도 초기화
+        const map = new (window as any).naver.maps.Map('naver-map', {
+          center: new (window as any).naver.maps.LatLng(currentLocation.latitude, currentLocation.longitude),
+          zoom: 14,
+          zoomControl: true,
+          zoomControlOptions: {
+            position: (window as any).naver.maps.Position.TOP_RIGHT,
+          },
+        });
+
+        // 병원 마커 생성
+        hospitals.forEach((hospital, index) => {
+          if (!hospital.latitude || !hospital.longitude) return;
+          const isSelected = selectedHospital?.hospitalId === hospital.hospitalId;
+          const marker = new (window as any).naver.maps.Marker({
+            position: new (window as any).naver.maps.LatLng(hospital.latitude, hospital.longitude),
+            map: map,
+            title: hospital.name,
+            icon: {
+              content: `<div style="background-color: ${isSelected ? '#FF8A3D' : '#4CAF50'}; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${index + 1}</div>`,
+              anchor: new (window as any).naver.maps.Point(0.5, 0.5),
+            },
+          });
+
+          (window as any).naver.maps.Event.addListener(marker, 'click', () => {
+            handleHospitalSelect(hospital);
+            // 네이버 지도 앱으로 열기
+            if (hospital.latitude && hospital.longitude) {
+              openNaverMap(hospital.name, hospital.latitude, hospital.longitude);
+            }
+          });
+        });
+
+        // 약국 마커 생성
+        pharmacies.forEach((pharmacy, index) => {
+          if (!pharmacy.latitude || !pharmacy.longitude) return;
+          const isSelected = selectedPharmacy?.pharmacyId === pharmacy.pharmacyId;
+          const marker = new (window as any).naver.maps.Marker({
+            position: new (window as any).naver.maps.LatLng(pharmacy.latitude, pharmacy.longitude),
+            map: map,
+            title: pharmacy.name,
+            icon: {
+              content: `<div style="background-color: ${isSelected ? '#FF8A3D' : '#9C27B0'}; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${index + 1}</div>`,
+              anchor: new (window as any).naver.maps.Point(0.5, 0.5),
+            },
+          });
+
+          (window as any).naver.maps.Event.addListener(marker, 'click', () => {
+            setSelectedPharmacy(pharmacy);
+            // 네이버 지도 앱으로 열기
+            if (pharmacy.latitude && pharmacy.longitude) {
+              openNaverMap(pharmacy.name, pharmacy.latitude, pharmacy.longitude);
+            }
+          });
+        });
+
+        // 장소 마커 생성
+        places.forEach((place, index) => {
+          if (!place.latitude || !place.longitude) return;
+          const isSelected = selectedPlace?.id === place.id;
+          const marker = new (window as any).naver.maps.Marker({
+            position: new (window as any).naver.maps.LatLng(place.latitude, place.longitude),
+            map: map,
+            title: place.name,
+            icon: {
+              content: `<div style="background-color: ${isSelected ? '#FF8A3D' : '#2196F3'}; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${index + 1}</div>`,
+              anchor: new (window as any).naver.maps.Point(0.5, 0.5),
+            },
+          });
+
+          (window as any).naver.maps.Event.addListener(marker, 'click', () => {
+            setSelectedPlace(place);
+            // 네이버 지도 앱으로 열기
+            if (place.latitude && place.longitude) {
+              openNaverMap(place.name, place.latitude, place.longitude);
+            }
+          });
+        });
+
+        // 현재 위치 마커
+        new (window as any).naver.maps.Marker({
+          position: new (window as any).naver.maps.LatLng(currentLocation.latitude, currentLocation.longitude),
+          map: map,
+          icon: {
+            content: '<div style="background-color: #FF8A3D; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+            anchor: new (window as any).naver.maps.Point(0.5, 0.5),
+          },
+        });
+      } catch (error) {
+        console.error('Naver 지도 초기화 오류:', error);
+      }
+    }, 100); // 100ms 지연
   };
 
   // 탭 변경 핸들러
@@ -426,7 +721,7 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
         <View style={styles.searchBar}>
           <TextInput
             style={styles.searchInput}
-            placeholder="주소 또는 지역을 입력하세요"
+            placeholder="장소명 또는 키워드를 검색하세요"
             placeholderTextColor="#999"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -530,7 +825,8 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
       </View>
 
       {/* 뷰 모드 전환 버튼 */}
-      {selectedCategory === 'hospital' && hospitals.length > 0 && (
+      {((selectedCategory === 'hospital' && hospitals.length > 0) || 
+        (selectedCategory === 'pharmacy' && pharmacies.length > 0)) && (
         <View style={styles.viewModeContainer}>
           <TouchableOpacity
             style={[styles.viewModeButton, mapViewMode === 'map' && styles.viewModeButtonActive]}
@@ -561,7 +857,9 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
               <ActivityIndicator size="large" color="#FF8A3D" />
               <Text style={styles.mapLoadingText}>장소를 불러오는 중...</Text>
             </View>
-          ) : selectedCategory === 'hospital' && hospitals.length > 0 && currentLocation ? (
+          ) : ((selectedCategory === 'hospital' && hospitals.length > 0) || 
+               (selectedCategory === 'pharmacy' && pharmacies.length > 0) ||
+               (selectedCategory !== 'all' && selectedCategory !== 'hospital' && selectedCategory !== 'pharmacy' && places.length > 0)) && currentLocation ? (
             Platform.OS === 'web' ? (
               // 웹 환경: 직접 Naver 지도 렌더링
               <View 
@@ -569,13 +867,9 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
                 nativeID="naver-map-container"
               >
                 {Platform.OS === 'web' && typeof document !== 'undefined' && (
-                  <div 
-                    id="naver-map" 
-                    style={{ 
-                      width: '100%', 
-                      height: '100%',
-                      minHeight: '400px'
-                    }} 
+                  <View
+                    nativeID="naver-map"
+                    style={styles.webMapContainer}
                   />
                 )}
               </View>
@@ -597,6 +891,28 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
                       const hospital = hospitals.find(h => h.hospitalId === data.hospitalId);
                       if (hospital) {
                         handleHospitalSelect(hospital);
+                        // 네이버 지도 앱으로 열기
+                        if (data.latitude && data.longitude && data.name) {
+                          openNaverMap(data.name, data.latitude, data.longitude);
+                        }
+                      }
+                    } else if (data.type === 'pharmacyClick') {
+                      const pharmacy = pharmacies.find(p => p.pharmacyId === data.pharmacyId);
+                      if (pharmacy) {
+                        setSelectedPharmacy(pharmacy);
+                        // 네이버 지도 앱으로 열기
+                        if (data.latitude && data.longitude && data.name) {
+                          openNaverMap(data.name, data.latitude, data.longitude);
+                        }
+                      }
+                    } else if (data.type === 'placeClick') {
+                      const place = places.find(p => p.id === data.placeId);
+                      if (place) {
+                        setSelectedPlace(place);
+                        // 네이버 지도 앱으로 열기
+                        if (data.latitude && data.longitude && data.name) {
+                          openNaverMap(data.name, data.latitude, data.longitude);
+                        }
                       }
                     }
                   } catch (e) {
@@ -615,16 +931,20 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
                   ? hospitals.length === 0
                     ? '동물병원을 찾을 수 없습니다'
                     : '지도를 불러오는 중...'
+                  : selectedCategory === 'pharmacy'
+                  ? pharmacies.length === 0
+                    ? '동물약국을 찾을 수 없습니다'
+                    : '지도를 불러오는 중...'
                   : places.length > 0
                   ? `${places.length}개의 장소를 찾았습니다`
                   : '장소를 찾을 수 없습니다'}
               </Text>
-            </View>
+      </View>
           )}
         </View>
       ) : (
         <View style={styles.listContainer}>
-          {hospitals.length > 0 ? (
+          {selectedCategory === 'hospital' && hospitals.length > 0 ? (
             <FlatList
               data={hospitals}
               keyExtractor={(item) => item.hospitalId.toString()}
@@ -689,23 +1009,130 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
               )}
               contentContainerStyle={styles.hospitalListContent}
             />
+          ) : selectedCategory === 'pharmacy' && pharmacies.length > 0 ? (
+            <FlatList
+              data={pharmacies}
+              keyExtractor={(item) => item.pharmacyId.toString()}
+              renderItem={({ item, index }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.hospitalListItem,
+                    selectedPharmacy?.pharmacyId === item.pharmacyId && styles.hospitalListItemSelected
+                  ]}
+                  onPress={() => handlePharmacySelect(item)}
+                >
+                  <View style={styles.hospitalListHeader}>
+                    <View style={styles.hospitalListNumber}>
+                      <Text style={styles.hospitalListNumberText}>{index + 1}</Text>
+                    </View>
+                    <View style={styles.hospitalListInfo}>
+                      <Text style={styles.hospitalListName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.hospitalListAddress} numberOfLines={1}>
+                        {item.address}
+                      </Text>
+                    </View>
+                    <View style={styles.hospitalListBadges}>
+                      {item.isLateNight && (
+                        <View style={styles.badge}>
+                          <Text style={styles.badgeText}>심야</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  <View style={styles.hospitalListDetails}>
+                    {item.distance !== undefined && (
+                      <View style={styles.hospitalListDetailItem}>
+                        <Ionicons name="location-outline" size={14} color="#999" />
+                        <Text style={styles.hospitalListDetailText}>
+                          {item.distance.toFixed(2)}km
+                        </Text>
+                      </View>
+                    )}
+                    {item.phone && (
+                      <View style={styles.hospitalListDetailItem}>
+                        <Ionicons name="call-outline" size={14} color="#999" />
+                        <Text style={styles.hospitalListDetailText}>{item.phone}</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              )}
+              contentContainerStyle={styles.hospitalListContent}
+            />
           ) : (
             <View style={styles.emptyListContainer}>
               <Ionicons name="location-outline" size={60} color="#999" />
-              <Text style={styles.emptyListText}>동물병원을 찾을 수 없습니다</Text>
+              <Text style={styles.emptyListText}>
+                {selectedCategory === 'hospital' 
+                  ? '동물병원을 찾을 수 없습니다'
+                  : selectedCategory === 'pharmacy'
+                  ? '동물약국을 찾을 수 없습니다'
+                  : '장소를 찾을 수 없습니다'}
+              </Text>
             </View>
           )}
       </View>
       )}
 
       {/* 하단 정보 카드 (리스트 모드일 때는 숨김) */}
-      {mapViewMode === 'map' && selectedHospital ? (
-      <View style={styles.infoCard}>
-        <View style={styles.infoCardHeader}>
+      {mapViewMode === 'map' && selectedPharmacy ? (
+        <View style={styles.infoCard}>
+          <View style={styles.infoCardHeader}>
+            <Text style={styles.infoCardTitle} numberOfLines={1}>
+              {selectedPharmacy.name}
+            </Text>
+            <View style={styles.statusBadge}>
+              {selectedPharmacy.isLateNight && (
+                <Text style={styles.statusText}>심야</Text>
+              )}
+            </View>
+          </View>
+          <Text style={styles.infoCardAddress} numberOfLines={1}>
+            {selectedPharmacy.address}
+          </Text>
+          {selectedPharmacy.phone && (
+            <View style={styles.infoCardDetails}>
+              <View style={styles.detailItem}>
+                <Ionicons name="call-outline" size={16} color="#666" />
+                <Text style={styles.detailText}>{selectedPharmacy.phone}</Text>
+              </View>
+            </View>
+          )}
+          {selectedPharmacy.distance !== undefined && (
+            <View style={styles.distanceContainer}>
+              <Text style={styles.distanceText}>
+                거리: {selectedPharmacy.distance.toFixed(2)}km
+              </Text>
+            </View>
+          )}
+          <View style={styles.cardActions}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => {
+                if (selectedPharmacy.latitude && selectedPharmacy.longitude) {
+                  openNaverMap(selectedPharmacy.name, selectedPharmacy.latitude, selectedPharmacy.longitude);
+                } else {
+                  Alert.alert('약국 정보', `${selectedPharmacy.name}\n${selectedPharmacy.address}`);
+                }
+              }}
+            >
+              <Ionicons name="map-outline" size={18} color="#FF8A3D" />
+              <Text style={styles.actionButtonText}>지도에서 보기</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.reserveButton}>
+              <Text style={styles.reserveButtonText}>예약하기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : mapViewMode === 'map' && selectedHospital ? (
+        <View style={styles.infoCard}>
+          <View style={styles.infoCardHeader}>
             <Text style={styles.infoCardTitle} numberOfLines={1}>
               {selectedHospital.name}
             </Text>
-          <View style={styles.statusBadge}>
+            <View style={styles.statusBadge}>
               {selectedHospital.is24h && (
                 <Text style={styles.statusText}>24시간</Text>
               )}
@@ -741,11 +1168,15 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
             <TouchableOpacity
               style={styles.actionButton}
               onPress={() => {
-                Alert.alert('병원 정보', `${selectedHospital.name}\n${selectedHospital.address}`);
+                if (selectedHospital.latitude && selectedHospital.longitude) {
+                  openNaverMap(selectedHospital.name, selectedHospital.latitude, selectedHospital.longitude);
+                } else {
+                  Alert.alert('병원 정보', `${selectedHospital.name}\n${selectedHospital.address}`);
+                }
               }}
             >
-              <Ionicons name="information-circle-outline" size={18} color="#FF8A3D" />
-              <Text style={styles.actionButtonText}>상세정보</Text>
+              <Ionicons name="map-outline" size={18} color="#FF8A3D" />
+              <Text style={styles.actionButtonText}>지도에서 보기</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.reserveButton}>
               <Text style={styles.reserveButtonText}>예약하기</Text>
@@ -767,28 +1198,32 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
           </Text>
           {selectedPlace.telephone && (
             <View style={styles.infoCardDetails}>
-          <View style={styles.detailItem}>
-            <Ionicons name="call-outline" size={16} color="#666" />
+              <View style={styles.detailItem}>
+                <Ionicons name="call-outline" size={16} color="#666" />
                 <Text style={styles.detailText}>{selectedPlace.telephone}</Text>
-          </View>
-        </View>
+              </View>
+            </View>
           )}
           {selectedPlace.category && (
             <View style={styles.categoryContainer}>
               <Text style={styles.categoryText}>{selectedPlace.category}</Text>
-        </View>
+            </View>
           )}
           <View style={styles.cardActions}>
             <TouchableOpacity
               style={styles.actionButton}
               onPress={() => {
-                if (selectedPlace.link) {
-                  Alert.alert('링크', selectedPlace.link);
+                if (selectedPlace.latitude && selectedPlace.longitude) {
+                  openNaverMap(selectedPlace.name, selectedPlace.latitude, selectedPlace.longitude);
+                } else if (selectedPlace.link) {
+                  Linking.openURL(selectedPlace.link);
+                } else {
+                  Alert.alert('장소 정보', `${selectedPlace.name}\n${selectedPlace.address}`);
                 }
               }}
             >
-              <Ionicons name="information-circle-outline" size={18} color="#FF8A3D" />
-              <Text style={styles.actionButtonText}>상세정보</Text>
+              <Ionicons name="map-outline" size={18} color="#FF8A3D" />
+              <Text style={styles.actionButtonText}>지도에서 보기</Text>
             </TouchableOpacity>
         <TouchableOpacity style={styles.reserveButton}>
           <Text style={styles.reserveButtonText}>예약하기</Text>
@@ -810,13 +1245,53 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
     </>
   );
 
-  // 다른 탭 컨텐츠 렌더링
+  // 다른 탭 컨텐츠 렌더링 (지도 포함)
   const renderOtherTabContent = (tabName: string) => (
+    <>
+      {/* 헤더 */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>{tabName}</Text>
+      </View>
+      
+      {/* 지도 영역 */}
+      <View style={styles.mapContainer}>
+        {currentLocation ? (
+          Platform.OS === 'web' ? (
+            <View style={styles.mapContainer}>
+              {Platform.OS === 'web' && typeof document !== 'undefined' && (
+                <View
+                  nativeID={`naver-map-${tabName}`}
+                  style={styles.webMapContainer}
+                />
+              )}
+            </View>
+          ) : (
+            <WebView
+              ref={webViewRef}
+              source={{ html: generateMapHTML() }}
+              style={styles.webView}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              mixedContentMode="always"
+              allowsInlineMediaPlayback={true}
+              originWhitelist={['*']}
+            />
+          )
+        ) : (
+          <View style={styles.mapPlaceholder}>
+            <Ionicons name="map-outline" size={60} color="#FF8A3D" />
+            <Text style={styles.mapPlaceholderText}>지도를 불러오는 중...</Text>
+          </View>
+        )}
+      </View>
+      
+      {/* 탭별 추가 컨텐츠 */}
     <View style={styles.tabPlaceholder}>
-      <Ionicons name="construct-outline" size={60} color="#FF8A3D" />
+        <Ionicons name="construct-outline" size={40} color="#FF8A3D" />
       <Text style={styles.tabPlaceholderText}>{tabName} 기능</Text>
       <Text style={styles.tabPlaceholderSubText}>준비 중입니다</Text>
     </View>
+    </>
   );
 
   return (

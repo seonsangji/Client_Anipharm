@@ -73,6 +73,8 @@ class MapService {
         longitude,
         userId,
       });
+
+      console.log('위치 전송 결과:', response.data);
       return response.data;
     } catch (error: any) {
       throw new Error(
