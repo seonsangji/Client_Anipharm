@@ -3,8 +3,8 @@
  * 지도 관련 API 호출 서비스
  */
 
-import apiClient from './api.service';
-import { GeocodeResult, Place, MapCategory, SearchOptions } from '../types/map.types';
+import apiClient from './api';
+import { GeocodeResult, Place, MapCategory, SearchOptions } from '../types/map';
 
 class MapService {
   /**

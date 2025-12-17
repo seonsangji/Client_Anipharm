@@ -22,14 +22,15 @@ import {
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { User } from '../../types/auth.types';
-import mapService from '../../services/map.service';
-import hospitalService from '../../services/hospital.service';
-import pharmacyService from '../../services/pharmacy.service';
-import { Place, MapCategory } from '../../types/map.types';
-import { VeterinaryHospital } from '../../types/hospital.types';
-import { VeterinaryPharmacy } from '../../types/pharmacy.types';
-import { NAVER_MAP_CLIENT_ID } from '../../config/api.config';
+import { User } from '../../types/auth';
+import mapService from '../../services/map';
+import hospitalService from '../../services/hospital';
+import pharmacyService from '../../services/pharmacy';
+import { Place, MapCategory } from '../../types/map';
+import { VeterinaryHospital } from '../../types/hospital';
+import { VeterinaryPharmacy } from '../../types/pharmacy';
+import { NAVER_MAP_CLIENT_ID } from '../../config/api';
+import ChatbotScreen from '../chatbot/ChatbotScreen';
 
 type TabType = 'home' | 'community' | 'chatbot' | 'journal' | 'profile';
 
@@ -120,24 +121,38 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
     try {
       setLoading(true);
       
-      // "전체" 카테고리는 Naver API로 "동물" 키워드 검색
+      // "전체" 카테고리는 동물병원 + 동물약국 합쳐서 표시
       if (category === 'all' && currentLocation) {
-        const options = {
-          keyword: '동물',
-          latitude: currentLocation.latitude,
-          longitude: currentLocation.longitude,
-          display: 30, // 더 많은 결과 표시
-        };
+        // 동물병원과 동물약국을 동시에 검색
+        const [hospitalResults, pharmacyResults] = await Promise.all([
+          hospitalService.findNearby(
+            currentLocation.latitude,
+            currentLocation.longitude,
+            5 // 5km 반경
+          ),
+          pharmacyService.findNearby(
+            currentLocation.latitude,
+            currentLocation.longitude,
+            5 // 5km 반경
+          )
+        ]);
         
-        const results = await mapService.searchByCategory('all', options);
-        setPlaces(results);
-        setHospitals([]);
-        setPharmacies([]);
-        if (results.length > 0) {
-          setSelectedPlace(results[0]);
+        setHospitals(hospitalResults);
+        setPharmacies(pharmacyResults);
+        setPlaces([]);
+        
+        // 첫 번째 병원을 선택 (병원이 없으면 약국)
+        if (hospitalResults.length > 0) {
+          setSelectedHospital(hospitalResults[0]);
+          setSelectedPharmacy(null);
+          setSelectedPlace(null);
+        } else if (pharmacyResults.length > 0) {
+          setSelectedPharmacy(pharmacyResults[0]);
+          setSelectedHospital(null);
+          setSelectedPlace(null);
+        } else {
           setSelectedHospital(null);
           setSelectedPharmacy(null);
-        } else {
           setSelectedPlace(null);
         }
       } else if (category === 'hospital' && currentLocation) {
@@ -173,31 +188,6 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
           setSelectedHospital(null);
         } else {
           setSelectedPharmacy(null);
-        }
-      } else if (category === 'hotel' || category === 'grooming' || category === 'petshop') {
-        // 펫호텔, 미용, 애완용품은 Naver API로 "동물" 키워드 검색
-        const options = currentLocation
-          ? {
-              keyword: '동물',
-              latitude: currentLocation.latitude,
-              longitude: currentLocation.longitude,
-              display: 30,
-            }
-          : { 
-              keyword: '동물',
-              display: 30 
-            };
-        
-        const results = await mapService.searchByCategory(category, options);
-        setPlaces(results);
-        setHospitals([]);
-        setPharmacies([]);
-        if (results.length > 0) {
-          setSelectedPlace(results[0]);
-          setSelectedHospital(null);
-          setSelectedPharmacy(null);
-        } else {
-          setSelectedPlace(null);
         }
       } else {
         // 기타 카테고리는 Naver API에서 검색 (기본 동작)
@@ -854,45 +844,13 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
               동물약국
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              selectedCategory === 'hotel' && styles.filterButtonActive,
-            ]}
-            onPress={() => handleCategoryChange('hotel')}
-          >
-            <Text
-              style={[
-                styles.filterButtonText,
-                selectedCategory === 'hotel' && styles.filterButtonTextActive,
-              ]}
-            >
-              펫호텔
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              selectedCategory === 'grooming' && styles.filterButtonActive,
-            ]}
-            onPress={() => handleCategoryChange('grooming')}
-          >
-            <Text
-              style={[
-                styles.filterButtonText,
-                selectedCategory === 'grooming' && styles.filterButtonTextActive,
-              ]}
-            >
-              미용
-            </Text>
-          </TouchableOpacity>
         </ScrollView>
       </View>
 
       {/* 뷰 모드 전환 버튼 */}
       {((selectedCategory === 'hospital' && hospitals.length > 0) || 
         (selectedCategory === 'pharmacy' && pharmacies.length > 0) ||
-        ((selectedCategory === 'all' || selectedCategory === 'hotel' || selectedCategory === 'grooming' || selectedCategory === 'petshop') && places.length > 0)) && (
+        (selectedCategory === 'all' && (hospitals.length > 0 || pharmacies.length > 0))) && (
         <View style={styles.viewModeContainer}>
           <TouchableOpacity
             style={[styles.viewModeButton, mapViewMode === 'map' && styles.viewModeButtonActive]}
@@ -1127,42 +1085,71 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
               )}
               contentContainerStyle={styles.hospitalListContent}
             />
-          ) : ((selectedCategory === 'all' || selectedCategory === 'hotel' || selectedCategory === 'grooming' || selectedCategory === 'petshop') && places.length > 0) ? (
+          ) : (selectedCategory === 'all' && (hospitals.length > 0 || pharmacies.length > 0)) ? (
             <FlatList
-              data={places}
-              keyExtractor={(item, index) => item.id || `place_${index}`}
+              data={[
+                ...hospitals.map(h => ({ type: 'hospital' as const, data: h })),
+                ...pharmacies.map(p => ({ type: 'pharmacy' as const, data: p }))
+              ]}
+              keyExtractor={(item, index) => 
+                item.type === 'hospital' 
+                  ? `hospital_${(item.data as VeterinaryHospital).hospitalId}` 
+                  : `pharmacy_${(item.data as VeterinaryPharmacy).pharmacyId}`
+              }
               renderItem={({ item, index }) => (
                 <TouchableOpacity
                   style={[
                     styles.hospitalListItem,
-                    selectedPlace?.id === item.id && styles.hospitalListItemSelected
+                    (item.type === 'hospital' && selectedHospital?.hospitalId === (item.data as VeterinaryHospital).hospitalId) ||
+                    (item.type === 'pharmacy' && selectedPharmacy?.pharmacyId === (item.data as VeterinaryPharmacy).pharmacyId)
+                      ? styles.hospitalListItemSelected
+                      : null
                   ]}
-                  onPress={() => handlePlaceSelect(item)}
+                  onPress={() => {
+                    if (item.type === 'hospital') {
+                      handleHospitalSelect(item.data as VeterinaryHospital);
+                    } else {
+                      handlePharmacySelect(item.data as VeterinaryPharmacy);
+                    }
+                  }}
                 >
                   <View style={styles.hospitalListHeader}>
                     <View style={styles.hospitalListNumber}>
                       <Text style={styles.hospitalListNumberText}>{index + 1}</Text>
                     </View>
                     <View style={styles.hospitalListInfo}>
-                      <Text style={styles.hospitalListName} numberOfLines={1}>
-                        {item.name}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.hospitalListName} numberOfLines={1}>
+                          {item.data.name}
+                        </Text>
+                        <View style={[styles.statusBadge, { backgroundColor: item.type === 'hospital' ? '#E3F2FD' : '#E8F5E9' }]}>
+                          <Text style={[styles.statusText, { color: item.type === 'hospital' ? '#1976D2' : '#388E3C' }]}>
+                            {item.type === 'hospital' ? '병원' : '약국'}
+                          </Text>
+                        </View>
+                      </View>
                       <Text style={styles.hospitalListAddress} numberOfLines={1}>
-                        {item.address || item.roadAddress || ''}
+                        {item.data.address}
                       </Text>
                     </View>
                   </View>
                   <View style={styles.hospitalListDetails}>
-                    {item.telephone && (
+                    {item.data.phone && (
                       <View style={styles.hospitalListDetailItem}>
                         <Ionicons name="call-outline" size={14} color="#999" />
-                        <Text style={styles.hospitalListDetailText}>{item.telephone}</Text>
+                        <Text style={styles.hospitalListDetailText}>{item.data.phone}</Text>
                       </View>
                     )}
-                    {item.category && (
+                    {item.type === 'hospital' && (item.data as VeterinaryHospital).isEmergency && (
                       <View style={styles.hospitalListDetailItem}>
-                        <Ionicons name="pricetag-outline" size={14} color="#999" />
-                        <Text style={styles.hospitalListDetailText}>{item.category}</Text>
+                        <Ionicons name="alert-circle" size={14} color="#F44336" />
+                        <Text style={[styles.hospitalListDetailText, { color: '#F44336' }]}>응급</Text>
+                      </View>
+                    )}
+                    {item.type === 'pharmacy' && (item.data as VeterinaryPharmacy).isLateNight && (
+                      <View style={styles.hospitalListDetailItem}>
+                        <Ionicons name="moon" size={14} color="#673AB7" />
+                        <Text style={[styles.hospitalListDetailText, { color: '#673AB7' }]}>심야</Text>
                       </View>
                     )}
                   </View>
@@ -1178,6 +1165,8 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
                   ? '동물병원을 찾을 수 없습니다'
                   : selectedCategory === 'pharmacy'
                   ? '동물약국을 찾을 수 없습니다'
+                  : selectedCategory === 'all'
+                  ? '주변 동물병원/약국을 찾을 수 없습니다'
                   : '장소를 찾을 수 없습니다'}
               </Text>
             </View>
@@ -1411,7 +1400,7 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
       <View style={styles.content}>
         {activeTab === 'home' && renderHomeContent()}
         {activeTab === 'community' && renderOtherTabContent('커뮤니티')}
-        {activeTab === 'chatbot' && renderOtherTabContent('챗봇')}
+        {activeTab === 'chatbot' && <ChatbotScreen />}
         {activeTab === 'journal' && renderOtherTabContent('일지')}
       </View>
 

@@ -3,13 +3,13 @@
  * 동물약국 관련 API 호출 서비스
  */
 
-import apiClient from './api.service';
+import apiClient from './api';
 import {
   VeterinaryPharmacy,
   PharmacyMarker,
   NearbyPharmaciesResponse,
   PharmacyMarkersResponse,
-} from '../types/pharmacy.types';
+} from '../types/pharmacy';
 
 class PharmacyService {
   /**

@@ -3,7 +3,7 @@
  * 지도 관련 타입 정의
  */
 
-export type MapCategory = 'hospital' | 'pharmacy' | 'petshop' | 'hotel' | 'grooming';
+export type MapCategory = 'hospital' | 'pharmacy';
 
 export interface GeocodeResult {
   latitude: number;

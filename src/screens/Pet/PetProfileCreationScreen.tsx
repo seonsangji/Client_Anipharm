@@ -19,13 +19,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { createPet } from '../../services/pet.service';
+import { createPet } from '../../services/pet';
 import {
   CreatePetRequest,
   PetSpecies,
   HealthConcern,
   HEALTH_CONCERN_LABELS,
-} from '../../types/pet.types';
+} from '../../types/pet';
 
 // 웹용 날짜 입력 컴포넌트
 const WebDateInput = ({ value, onChange, hasError, disabled }: any) => {

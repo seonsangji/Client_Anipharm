@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import LoginScreen from './src/screens/Auth/LoginScreen';
-import SignUpScreen from './src/screens/Auth/SignUpScreen';
-import HomeScreen from './src/screens/Main/HomeScreen';
-import PetProfileCreationScreen from './src/screens/Pet/PetProfileCreationScreen';
-import PetSuccessScreen from './src/screens/Pet/PetSuccessScreen';
-import { User } from './src/types/auth.types';
-import { checkAuth } from './src/services/auth.service';
+import LoginScreen from './src/screens/auth/LoginScreen';
+import SignUpScreen from './src/screens/auth/SignUpScreen';
+import HomeScreen from './src/screens/home/HomeScreen';
+import PetProfileCreationScreen from './src/screens/pet/PetProfileCreationScreen';
+import PetSuccessScreen from './src/screens/pet/PetSuccessScreen';
+import { User } from './src/types/auth';
+import { checkAuth } from './src/services/auth';
 
 type Screen = 'login' | 'signup' | 'home' | 'petProfile' | 'petSuccess';
 
@@ -50,11 +50,28 @@ export default function App() {
       setCurrentScreen('login');
     };
 
-    if (typeof window !== 'undefined') {
-      window.addEventListener('auth:logout', handleLogoutEvent);
-      return () => {
-        window.removeEventListener('auth:logout', handleLogoutEvent);
-      };
+    // React Native Web 환경에서만 window 이벤트 사용
+    // window.addEventListener가 함수인지 확인
+    if (
+      typeof window !== 'undefined' &&
+      window.addEventListener &&
+      typeof window.addEventListener === 'function' &&
+      window.removeEventListener &&
+      typeof window.removeEventListener === 'function'
+    ) {
+      try {
+        window.addEventListener('auth:logout', handleLogoutEvent);
+        return () => {
+          try {
+            window.removeEventListener('auth:logout', handleLogoutEvent);
+          } catch (e) {
+            // 무시
+          }
+        };
+      } catch (e) {
+        // window.addEventListener가 작동하지 않는 환경 (React Native)
+        console.log('window 이벤트 리스너를 사용할 수 없습니다 (React Native 환경)');
+      }
     }
   }, []);
 

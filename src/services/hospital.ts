@@ -3,14 +3,14 @@
  * 동물병원 관련 API 호출 서비스
  */
 
-import apiClient from './api.service';
+import apiClient from './api';
 import {
   VeterinaryHospital,
   HospitalMarker,
   NearbyHospitalsResponse,
   HospitalDetailResponse,
   HospitalMarkersResponse,
-} from '../types/hospital.types';
+} from '../types/hospital';
 
 class HospitalService {
   /**

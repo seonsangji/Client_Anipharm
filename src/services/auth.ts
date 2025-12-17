@@ -3,8 +3,8 @@
  * 인증 관련 API 호출 함수들
  */
 
-import apiClient from './api.service';
-import { API_CONFIG } from '../config/api.config';
+import apiClient from './api';
+import { API_CONFIG } from '../config/api';
 import {
   RegisterRequest,
   RegisterResponse,
@@ -12,7 +12,7 @@ import {
   LoginResponse,
   CheckAvailabilityResponse,
   User,
-} from '../types/auth.types';
+} from '../types/auth';
 import { saveToken, saveUserData, clearAuthData } from '../utils/storage';
 
 /**
