@@ -17,8 +17,8 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { login } from '../../services/auth.service';
-import { LoginRequest, User } from '../../types/auth.types';
+import { login } from '../../services/auth';
+import { LoginRequest, User } from '../../types/auth';
 
 interface LoginScreenProps {
   onNavigateToSignUp: () => void;

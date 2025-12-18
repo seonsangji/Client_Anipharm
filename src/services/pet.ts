@@ -3,15 +3,15 @@
  * 반려동물 관련 API 호출 함수들
  */
 
-import apiClient from './api.service';
-import { API_CONFIG } from '../config/api.config';
+import apiClient from './api';
+import { API_CONFIG } from '../config/api';
 import {
   CreatePetRequest,
   UpdatePetRequest,
   PetResponse,
   PetsResponse,
   DeletePetResponse,
-} from '../types/pet.types';
+} from '../types/pet';
 
 /**
  * 반려동물 목록 조회

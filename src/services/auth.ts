@@ -3,15 +3,17 @@
  * 인증 관련 API 호출 함수들
  */
 
-import apiClient from './api.service';
-import { API_CONFIG } from '../config/api.config';
+import apiClient from './api';
+import { API_CONFIG } from '../config/api';
 import {
   RegisterRequest,
   RegisterResponse,
   LoginRequest,
   LoginResponse,
   CheckAvailabilityResponse,
-} from '../types/auth.types';
+  User,
+} from '../types/auth';
+import { saveToken, saveUserData, clearAuthData } from '../utils/storage';
 
 /**
  * 회원가입
@@ -34,6 +36,13 @@ export const login = async (data: LoginRequest): Promise<LoginResponse> => {
     data
   );
   console.log('로그인 데이터 확인:',response.data)
+  
+  // 로그인 성공 시 토큰과 사용자 정보 저장
+  if (response.data.success && response.data.data) {
+    await saveToken(response.data.data.token);
+    await saveUserData(response.data.data.user);
+  }
+  
   return response.data;
 };
 
@@ -41,7 +50,24 @@ export const login = async (data: LoginRequest): Promise<LoginResponse> => {
  * 로그아웃
  */
 export const logout = async (): Promise<void> => {
-  await apiClient.post(API_CONFIG.ENDPOINTS.AUTH.LOGOUT);
+  try {
+    await apiClient.post(API_CONFIG.ENDPOINTS.AUTH.LOGOUT);
+  } catch (error) {
+    console.error('로그아웃 API 호출 실패:', error);
+  } finally {
+    // API 호출 성공 여부와 관계없이 로컬 저장소 정리
+    await clearAuthData();
+  }
+};
+
+/**
+ * 저장된 토큰으로 사용자 정보 확인
+ */
+export const checkAuth = async (): Promise<{ token: string | null; user: User | null }> => {
+  const { getToken, getUserData } = await import('../utils/storage');
+  const token = await getToken();
+  const user = await getUserData();
+  return { token, user };
 };
 
 /**

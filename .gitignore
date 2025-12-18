@@ -4,6 +4,9 @@
 # 레퍼런스(ref)
 ref/
 
+# 문서 파일
+PROJECT_STRUCTURE.md
+
 
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
@@ -38,7 +41,9 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+.env.local
 
 # typescript
 *.tsbuildinfo
@@ -46,3 +51,18 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+build/
+*.log
+
+# Test coverage
+coverage/
+.nyc_output/

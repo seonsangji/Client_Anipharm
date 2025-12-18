@@ -17,8 +17,8 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { register } from '../../services/auth.service';
-import { RegisterRequest, User } from '../../types/auth.types';
+import { register } from '../../services/auth';
+import { RegisterRequest, User } from '../../types/auth';
 import SuccessModal from './SuccessModal';
 
 type SignUpStep = 'email' | 'password' | 'passwordConfirm' | 'nickname';
