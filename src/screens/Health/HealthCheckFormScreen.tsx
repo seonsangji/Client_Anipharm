@@ -165,9 +165,9 @@ const HealthCheckFormScreen = ({
   };
 
   /**
-   * 건강 체크표 제출
+   * 건강 체크표 제출 (메모가 100자 이상이면 사용자 입력 없이 다음 단계로 진행)
    */
-  const handleSubmit = async () => {
+  const handleSubmit = async (skipUserInput = false) => {
     if (!validate()) {
       Alert.alert('알림', '건강체크표를 완료해주세요.');
       return;
@@ -176,6 +176,9 @@ const HealthCheckFormScreen = ({
     if (!selectedPetId) {
       return;
     }
+
+    // 메모가 100자 이상이면 사용자 입력 없이 바로 대화 시작
+    const shouldSkipUserInput = note.trim().length >= 100;
 
     try {
       setLoading(true);
@@ -201,7 +204,22 @@ const HealthCheckFormScreen = ({
         if (isNaN(healthCheckId)) {
           throw new Error('유효하지 않은 건강 체크표 ID입니다.');
         }
-        onComplete(selectedPetId, healthCheckId);
+
+        // 메모가 100자 이상이면 자동으로 다음 단계로 진행
+        if (shouldSkipUserInput) {
+          Alert.alert(
+            '알림',
+            '입력하신 정보가 충분합니다. AI 분석을 시작합니다.',
+            [
+              {
+                text: '확인',
+                onPress: () => onComplete(selectedPetId, healthCheckId),
+              },
+            ]
+          );
+        } else {
+          onComplete(selectedPetId, healthCheckId);
+        }
       } else {
         throw new Error(response.message || '건강 상태 상담 시작에 실패했습니다.');
       }

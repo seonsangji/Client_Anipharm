@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -52,6 +53,7 @@ const HealthChatScreen = ({
   const [loading, setLoading] = useState(false);
   const [assessing, setAssessing] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [showEndModal, setShowEndModal] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // 디버깅: healthCheckId 확인
@@ -154,102 +156,93 @@ const HealthChatScreen = ({
    * 건강 평가 생성 (트리아지)
    */
   const handleGenerateAssessment = async () => {
+    console.log('상담 결과 받기 버튼 클릭됨');
+    console.log('현재 상태:', { assessing, loading, petId, healthCheckId });
+
     if (assessing) {
+      console.log('이미 평가 중이므로 중단');
       return;
     }
 
-    Alert.alert(
-      '건강 평가',
-      '건강 체크표와 대화 내용을 종합하여 4단계 상태 가이드를 생성하시겠습니까?',
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '확인',
-          onPress: async () => {
-            try {
-              setAssessing(true);
-              const response = await generateHealthAssessment({
-                petId: Number(petId),
-                healthCheckId: Number(healthCheckId),
-              });
+    try {
+      setAssessing(true);
+      console.log('트리아지 평가 요청 시작');
 
-              if (response.success && response.data) {
-                onComplete(response.data);
-              } else {
-                throw new Error(response.message || '건강 평가 생성에 실패했습니다.');
-              }
-            } catch (error: any) {
-              console.error('건강 평가 생성 실패:', error);
-              Alert.alert(
-                '오류',
-                error.response?.data?.message ||
-                  error.message ||
-                  '건강 평가 생성에 실패했습니다. 판단이 어렵습니다. 가까운 병원에 문의하세요.'
-              );
-            } finally {
-              setAssessing(false);
-            }
-          },
-        },
-      ]
-    );
+      const response = await generateHealthAssessment({
+        petId: Number(petId),
+        healthCheckId: Number(healthCheckId),
+      });
+
+      console.log('트리아지 평가 응답:', response);
+
+      if (response.success && response.data) {
+        console.log('평가 성공, 결과 화면으로 이동:', response.data);
+        onComplete(response.data);
+      } else {
+        throw new Error(response.message || '건강 평가 생성에 실패했습니다.');
+      }
+    } catch (error: any) {
+      console.error('건강 평가 생성 실패:', error);
+      console.error('에러 상세:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
+      Alert.alert(
+        '오류',
+        error.response?.data?.message ||
+          error.message ||
+          '건강 평가 생성에 실패했습니다. 판단이 어렵습니다. 가까운 병원에 문의하세요.'
+      );
+    } finally {
+      setAssessing(false);
+    }
   };
 
   /**
-   * 대화 종료
+   * 대화 종료 모달 열기
    */
-  const handleEndConversation = async () => {
-    Alert.alert(
-      '대화 종료',
-      '대화를 종료하고 리포트를 저장하시겠습니까?',
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '저장하지 않고 종료',
-          style: 'destructive',
-          onPress: () => {
-            onNavigateBack();
-          },
-        },
-        {
-          text: '저장하고 종료',
-          onPress: async () => {
-            try {
-              setEnding(true);
-              const response = await endConversation({
-                petId: Number(petId),
-                conversationType: 'health_status',
-                healthCheckId: Number(healthCheckId),
-                saveReport: true,
-              });
+  const handleEndConversation = () => {
+    setShowEndModal(true);
+  };
 
-              if (response.success) {
-                Alert.alert('알림', '리포트가 저장되었습니다.', [
-                  {
-                    text: '확인',
-                    onPress: () => {
-                      onNavigateBack();
-                    },
-                  },
-                ]);
-              } else {
-                throw new Error(response.message || '리포트 저장에 실패했습니다.');
-              }
-            } catch (error: any) {
-              console.error('대화 종료 실패:', error);
-              Alert.alert(
-                '오류',
-                error.response?.data?.message ||
-                  error.message ||
-                  '리포트 저장에 실패했습니다.'
-              );
-            } finally {
-              setEnding(false);
-            }
+  /**
+   * 대화 종료 및 저장
+   */
+  const handleConfirmEnd = async () => {
+    setShowEndModal(false);
+    try {
+      setEnding(true);
+      const response = await endConversation({
+        petId: Number(petId),
+        conversationType: 'health_status',
+        healthCheckId: Number(healthCheckId),
+        saveReport: true,
+      });
+
+      if (response.success) {
+        Alert.alert('알림', '대화 내용이 저장되었습니다.', [
+          {
+            text: '확인',
+            onPress: () => {
+              onNavigateBack();
+            },
           },
-        },
-      ]
-    );
+        ]);
+      } else {
+        throw new Error(response.message || '저장에 실패했습니다.');
+      }
+    } catch (error: any) {
+      console.error('대화 종료 실패:', error);
+      Alert.alert(
+        '오류',
+        error.response?.data?.message ||
+          error.message ||
+          '저장에 실패했습니다.'
+      );
+    } finally {
+      setEnding(false);
+    }
   };
 
   return (
@@ -320,15 +313,20 @@ const HealthChatScreen = ({
       <View style={styles.actionContainer}>
         <TouchableOpacity
           style={[styles.assessButton, assessing && styles.assessButtonDisabled]}
-          onPress={handleGenerateAssessment}
+          onPress={() => {
+            console.log('TouchableOpacity onPress 호출됨');
+            console.log('disabled 상태:', assessing || loading);
+            handleGenerateAssessment();
+          }}
           disabled={assessing || loading}
+          activeOpacity={0.7}
         >
           {assessing ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <>
               <Ionicons name="medical" size={20} color="#fff" />
-              <Text style={styles.assessButtonText}>건강 평가하기</Text>
+              <Text style={styles.assessButtonText}>상담 결과 받기</Text>
             </>
           )}
         </TouchableOpacity>
@@ -358,6 +356,44 @@ const HealthChatScreen = ({
           )}
         </TouchableOpacity>
       </View>
+
+      {/* 대화 종료 확인 모달 */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showEndModal}
+        onRequestClose={() => setShowEndModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalIconContainer}>
+              <Ionicons name="alert-circle-outline" size={48} color="#FF8A3D" />
+            </View>
+            <Text style={styles.modalTitle}>상담을 종료하시겠습니까?</Text>
+            <Text style={styles.modalMessage}>상담 중인 모든 내용은 초기화됩니다.</Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowEndModal(false)}
+                disabled={ending}
+              >
+                <Text style={styles.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirmButton}
+                onPress={handleConfirmEnd}
+                disabled={ending}
+              >
+                {ending ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>종료</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -443,6 +479,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#F5F5F5',
+    zIndex: 10,
+    elevation: 10,
   },
   assessButton: {
     flexDirection: 'row',
@@ -496,6 +534,68 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: '#FFD4B8',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+  },
+  modalIconContainer: {
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  modalConfirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: '#FF8A3D',
+    alignItems: 'center',
+  },
+  modalConfirmText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
 });
 

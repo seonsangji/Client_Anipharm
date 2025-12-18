@@ -26,38 +26,53 @@ interface HealthResultScreenProps {
     recommended_actions: string[];
     health_check_summary: string;
   };
+  healthCheckData?: {
+    concernType: string[];
+    appetite: string;
+    activity: string;
+    temperature: string;
+    note?: string;
+  };
   onNavigateBack: () => void;
   onSaveReport?: () => void;
 }
 
 const TRIAGE_CONFIG = {
   BLUE: {
-    label: '양호',
-    color: '#4A90E2',
-    backgroundColor: '#E8F4FD',
+    label: '안정적인 상태',
+    color: '#2196F3',
+    backgroundColor: '#E3F2FD',
+    badgeColor: '#BBDEFB',
+    badgeText: '1단계',
     icon: 'checkmark-circle',
-    description: '현재 상태는 양호합니다.',
+    description: '위험 신호는 확인되지 않았습니다.\n일상적인 관찰만으로 충분해요!',
   },
   GREEN: {
-    label: '주의',
-    color: '#50C878',
-    backgroundColor: '#E8F8F0',
+    label: '주의가 필요한 상태',
+    color: '#4CAF50',
+    backgroundColor: '#E8F5E9',
+    badgeColor: '#C8E6C9',
+    badgeText: '2단계',
     icon: 'alert-circle',
-    description: '주의가 필요합니다.',
+    description: '명소와 다른 변화가 약하게 감지되었습니다.\n오늘 하루 동안 상태를 조금 더 지켜봐 주세요.',
   },
   AMBER: {
-    label: '상담 권고',
-    color: '#FFA500',
-    backgroundColor: '#FFF8E1',
+    label: '병원 방문 권장',
+    color: '#FF9800',
+    backgroundColor: '#FFF3E0',
+    badgeColor: '#FFE0B2',
+    badgeText: '3단계',
     icon: 'warning',
-    description: '동물병원 상담을 권고합니다.',
+    description: '명소와 다른 변화가 약하게 감지되었습니다.\n오늘 하루 동안 상태를 조금 더 지켜봐 주세요.',
   },
   RED: {
-    label: '즉시 내원',
-    color: '#FF4444',
+    label: '즉시 병원 방문 필요',
+    color: '#F44336',
     backgroundColor: '#FFEBEE',
+    badgeColor: '#FFCDD2',
+    badgeText: '4단계',
     icon: 'alert',
-    description: '즉시 동물병원에 내원하세요.',
+    description: '명소와 다른 변화가 약하게 감지되었습니다.\n오늘 하루 동안 상태를 조금 더 지켜봐 주세요.',
   },
 };
 
@@ -65,6 +80,7 @@ const HealthResultScreen = ({
   petId,
   healthCheckId,
   assessment,
+  healthCheckData,
   onNavigateBack,
   onSaveReport,
 }: HealthResultScreenProps) => {
@@ -125,10 +141,10 @@ const HealthResultScreen = ({
       >
         {/* 트리아지 카드 */}
         <View style={[styles.triageCard, { backgroundColor: config.backgroundColor }]}>
-          <View style={styles.triageIconContainer}>
-            <Ionicons name={config.icon as any} size={48} color={config.color} />
+          <View style={[styles.triageBadge, { backgroundColor: config.badgeColor }]}>
+            <Text style={styles.triageBadgeText}>{config.badgeText}</Text>
           </View>
-          <Text style={[styles.triageLevel, { color: config.color }]}>
+          <Text style={[styles.triageLevel, { color: '#000' }]}>
             {config.label}
           </Text>
           <Text style={styles.triageDescription}>{config.description}</Text>
@@ -141,6 +157,37 @@ const HealthResultScreen = ({
             <Text style={styles.summaryText}>{assessment.health_check_summary}</Text>
           </View>
         </View>
+
+        {/* 체크표 요약 */}
+        {healthCheckData && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>체크표 요약</Text>
+            <View style={styles.checkSummaryCard}>
+              <View style={styles.checkRow}>
+                <Text style={styles.checkLabel}>증상:</Text>
+                <Text style={styles.checkValue}>{healthCheckData.concernType.join(', ')}</Text>
+              </View>
+              <View style={styles.checkRow}>
+                <Text style={styles.checkLabel}>식욕:</Text>
+                <Text style={styles.checkValue}>{healthCheckData.appetite}</Text>
+              </View>
+              <View style={styles.checkRow}>
+                <Text style={styles.checkLabel}>활동량:</Text>
+                <Text style={styles.checkValue}>{healthCheckData.activity}</Text>
+              </View>
+              <View style={styles.checkRow}>
+                <Text style={styles.checkLabel}>체온:</Text>
+                <Text style={styles.checkValue}>{healthCheckData.temperature}</Text>
+              </View>
+              {healthCheckData.note && (
+                <View style={styles.checkRow}>
+                  <Text style={styles.checkLabel}>메모:</Text>
+                  <Text style={styles.checkValue}>{healthCheckData.note}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* 권장 조치사항 */}
         <View style={styles.section}>
@@ -228,23 +275,32 @@ const styles = StyleSheet.create({
   triageCard: {
     borderRadius: 16,
     padding: 24,
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 24,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
-  triageIconContainer: {
+  triageBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
     marginBottom: 12,
   },
+  triageBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#333',
+  },
   triageLevel: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   triageDescription: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666',
-    textAlign: 'center',
+    textAlign: 'left',
+    lineHeight: 20,
   },
   section: {
     marginBottom: 24,
@@ -266,6 +322,29 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#333',
     lineHeight: 22,
+  },
+  checkSummaryCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  checkRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    alignItems: 'flex-start',
+  },
+  checkLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    width: 70,
+  },
+  checkValue: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
   },
   actionCard: {
     flexDirection: 'row',
