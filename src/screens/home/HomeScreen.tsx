@@ -38,9 +38,15 @@ interface HomeScreenProps {
   userData: User | null;
   onLogout: () => void;
   onNavigateToPetProfile?: () => void;
+  onNavigateToHealthCheck?: (petId?: number) => void;
 }
 
-const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenProps) => {
+const HomeScreen = ({
+  userData,
+  onLogout,
+  onNavigateToPetProfile,
+  onNavigateToHealthCheck,
+}: HomeScreenProps) => {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<MapCategory | 'all'>('all');
@@ -1400,7 +1406,15 @@ const HomeScreen = ({ userData, onLogout, onNavigateToPetProfile }: HomeScreenPr
       <View style={styles.content}>
         {activeTab === 'home' && renderHomeContent()}
         {activeTab === 'community' && renderOtherTabContent('커뮤니티')}
-        {activeTab === 'chatbot' && <ChatbotScreen />}
+        {activeTab === 'chatbot' && (
+          <ChatbotScreen
+            onSelectHealthConsult={() => onNavigateToHealthCheck?.()}
+            onSelectCareConsult={() => {
+              // 케어 관리 상담은 추후 구현
+              Alert.alert('알림', '케어 관리 상담 기능은 준비중입니다.');
+            }}
+          />
+        )}
         {activeTab === 'journal' && renderOtherTabContent('일지')}
       </View>
 
