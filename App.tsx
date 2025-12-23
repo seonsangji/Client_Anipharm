@@ -276,12 +276,16 @@ export default function App() {
 
   // 케어 관리 대화 화면에서 뒤로가기
   const handleCareChatBack = () => {
+    console.log('[App] handleCareChatBack 호출됨');
     setCareConversationId(null);
+    console.log('[App] homeInitialTab을 chatbot으로 설정');
     setHomeInitialTab('chatbot'); // chatbot 탭 활성화
+    console.log('[App] currentScreen을 home으로 설정');
     setCurrentScreen('home');
+    console.log('[App] BotHome(상담하기 화면)으로 이동 완료');
   };
 
-  // 케어 관리 대화 화면에서 정리함으로 이동
+  // 케어 관리 대화 화면에서 보관함으로 이동
   const handleCareChatToInbox = () => {
     setCareConversationId(null);
     setCurrentScreen('careInbox');
@@ -317,12 +321,12 @@ export default function App() {
     setCurrentScreen('careInbox');
   };
 
-  // 케어 관리 정리함 화면에서 뒤로가기
+  // 케어 관리 보관함 화면에서 뒤로가기
   const handleCareInboxBack = () => {
     setCurrentScreen('home');
   };
 
-  // 케어 관리 정리함에서 대화 상세 보기
+  // 케어 관리 보관함에서 대화 상세 보기
   const handleCareInboxToDetail = (conversationId: number) => {
     setCareConversationId(conversationId);
     setCurrentScreen('careArchiveDetail');
@@ -416,6 +420,7 @@ export default function App() {
         />
       ) : (
         <HomeScreen
+          key={homeInitialTab || 'default'} // key를 추가하여 initialTab 변경 시 재렌더링 강제
           userData={userData}
           onLogout={handleLogout}
           onNavigateToPetProfile={handleNavigateToPetList}

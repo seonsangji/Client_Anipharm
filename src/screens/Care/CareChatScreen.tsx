@@ -155,19 +155,36 @@ const CareChatScreen = ({
   // 히스토리 목록 불러오기
   const loadHistory = async () => {
     try {
+      console.log('[CareChatScreen] 히스토리 로드 시작', { petId, conversationType: 'care_management' });
       setLoadingHistory(true);
+      
       const response = await getConversationList(petId, 'care_management');
+      console.log('[CareChatScreen] 히스토리 API 응답:', response);
 
       if (response.success && response.data?.conversations) {
+        console.log('[CareChatScreen] ✅ 히스토리 로드 성공, 대화 개수:', response.data.conversations.length);
         setHistoryList(response.data.conversations);
       } else {
+        console.warn('[CareChatScreen] ⚠️ 히스토리가 비어있거나 응답 형식이 올바르지 않음');
         setHistoryList([]);
       }
     } catch (error: any) {
-      console.error('히스토리 불러오기 실패:', error);
+      console.error('[CareChatScreen] ❌ 히스토리 불러오기 실패:', error);
+      console.error('[CareChatScreen] 에러 상세:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url,
+      });
+      
+      // 404 에러인 경우 조용히 처리 (히스토리는 선택적 기능)
+      if (error.response?.status === 404) {
+        console.warn('[CareChatScreen] 404 에러: 히스토리 API 엔드포인트가 없을 수 있습니다.');
+      }
       setHistoryList([]);
     } finally {
       setLoadingHistory(false);
+      console.log('[CareChatScreen] 히스토리 로드 완료');
     }
   };
 
@@ -253,53 +270,79 @@ const CareChatScreen = ({
    * 대화 보관하기 모달 열기
    */
   const handleSaveToInboxConfirm = () => {
+    console.log('[CareChatScreen] handleSaveToInboxConfirm 호출됨 - 대화 보관하기 모달 열기');
     if (messages.length <= 1) {
+      console.warn('[CareChatScreen] 정리할 내용이 없음 (메시지 개수:', messages.length, ')');
       Alert.alert('알림', '정리할 내용이 없습니다.');
       return;
     }
+    console.log('[CareChatScreen] 보관 모달 표시, 메시지 개수:', messages.length);
     setShowSaveModal(true);
   };
 
   /**
-   * 대화 정리함으로 이동 (실제 저장)
+   * 대화 보관함으로 이동 (실제 저장)
    */
   const handleSaveToInbox = async () => {
+    console.log('[CareChatScreen] handleSaveToInbox 호출됨 - 대화 보관하기 시작');
     setShowSaveModal(false);
     
     try {
       setEnding(true);
+      console.log('[CareChatScreen] 대화 보관 API 호출 시작', {
+        petId: Number(petId),
+        conversationType: 'care_management',
+        saveReport: true,
+        messageCount: messages.length,
+      });
+      
       const response = await endConversation({
         petId: Number(petId),
         conversationType: 'care_management',
         saveReport: true,
       });
 
+      console.log('[CareChatScreen] 대화 보관 API 응답:', response);
+
       if (response.success) {
-        Alert.alert('알림', '대화가 정리함에 저장되었습니다.', [
+        console.log('[CareChatScreen] ✅ 대화 보관 성공');
+        console.log('[CareChatScreen] 응답 데이터:', response.data);
+        Alert.alert('알림', '대화가 보관함에 저장되었습니다.', [
           {
             text: '확인',
             onPress: () => {
+              console.log('[CareChatScreen] 보관 성공 후 보관함으로 이동');
               if (onNavigateToInbox) {
+                console.log('[CareChatScreen] onNavigateToInbox 호출');
                 onNavigateToInbox();
               } else {
+                console.log('[CareChatScreen] onNavigateBack 호출');
                 onNavigateBack();
               }
             },
           },
         ]);
       } else {
-        throw new Error(response.message || '정리함 저장에 실패했습니다.');
+        console.error('[CareChatScreen] ❌ 대화 보관 실패:', response.message);
+        throw new Error(response.message || '보관함 저장에 실패했습니다.');
       }
     } catch (error: any) {
-      console.error('정리함 저장 실패:', error);
+      console.error('[CareChatScreen] ❌ 대화 보관 실패:', error);
+      console.error('[CareChatScreen] 에러 상세:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        stack: error.stack,
+      });
       Alert.alert(
         '오류',
         error.response?.data?.message ||
           error.message ||
-          '정리함 저장 실패'
+          '보관함 저장 실패'
       );
     } finally {
       setEnding(false);
+      console.log('[CareChatScreen] 대화 보관 프로세스 완료');
     }
   };
 
@@ -307,6 +350,7 @@ const CareChatScreen = ({
    * 대화 종료 모달 열기
    */
   const handleEndConversation = () => {
+    console.log('[CareChatScreen] handleEndConversation 호출됨 - 종료 모달 열기');
     setShowEndModal(true);
   };
 
@@ -314,29 +358,35 @@ const CareChatScreen = ({
    * 대화 종료 확인
    */
   const handleConfirmEnd = async () => {
+    console.log('[CareChatScreen] handleConfirmEnd 호출됨');
     setShowEndModal(false);
     try {
       setEnding(true);
+      console.log('[CareChatScreen] 대화 종료 API 호출 시작', { petId, conversationType: 'care_management' });
+      
       const response = await endConversation({
         petId: Number(petId),
         conversationType: 'care_management',
         saveReport: false,
       });
 
+      console.log('[CareChatScreen] 대화 종료 API 응답:', response);
+
       if (response.success) {
-        Alert.alert('알림', '대화가 종료되었습니다.', [
-          {
-            text: '확인',
-            onPress: () => {
-              onNavigateBack();
-            },
-          },
-        ]);
+        console.log('[CareChatScreen] 대화 종료 성공, BotHome으로 이동');
+        // Alert 없이 바로 BotHome으로 이동
+        onNavigateBack();
       } else {
+        console.warn('[CareChatScreen] 대화 종료 실패:', response.message);
         throw new Error(response.message || '대화 종료에 실패했습니다.');
       }
     } catch (error: any) {
-      console.error('대화 종료 실패:', error);
+      console.error('[CareChatScreen] 대화 종료 실패:', error);
+      console.error('[CareChatScreen] 에러 상세:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
       Alert.alert(
         '오류',
         error.response?.data?.message ||
@@ -528,7 +578,7 @@ const CareChatScreen = ({
               <Ionicons name="archive-outline" size={48} color="#FF8A3D" />
             </View>
             <Text style={styles.modalTitle}>대화를 보관하시겠습니까?</Text>
-            <Text style={styles.modalMessage}>대화 내용이 정리함에 저장됩니다.</Text>
+            <Text style={styles.modalMessage}>대화 내용이 보관함에 저장됩니다.</Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.modalCancelButton}

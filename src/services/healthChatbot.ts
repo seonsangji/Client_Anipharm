@@ -108,9 +108,20 @@ export interface InboxItem {
   conversationId: number;
   petId: number;
   conversationType: 'health_status' | 'care_management';
-  summary: string;
-  createdAt: string;
-  updatedAt: string;
+  conversationTypeLabel?: string;
+  healthCheckId?: number | null;
+  messageCount?: number;
+  userMessageCount?: number;
+  assistantMessageCount?: number;
+  startTime?: string | Date;
+  endTime?: string | Date;
+  duration?: number;
+  summary?: {
+    firstUserMessage?: string | null;
+    lastAssistantMessage?: string | null;
+  } | string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface InboxListResponse {
@@ -236,7 +247,7 @@ export const getConversationList = async (
 };
 
 /**
- * 대화 정리함 조회
+ * 대화 보관함 조회
  */
 export const getInboxList = async (
   petId: number,

@@ -62,10 +62,26 @@ const HomeScreen = ({
 
   // initialTab이 변경되면 activeTab 업데이트
   useEffect(() => {
+    console.log('[HomeScreen] initialTab 변경됨:', initialTab);
     if (initialTab) {
+      console.log('[HomeScreen] activeTab을', initialTab, '으로 설정');
       setActiveTab(initialTab);
     }
   }, [initialTab]);
+
+  // 컴포넌트 마운트 시 initialTab 확인
+  useEffect(() => {
+    console.log('[HomeScreen] 마운트됨, initialTab:', initialTab, 'activeTab:', activeTab);
+    if (initialTab && initialTab !== activeTab) {
+      console.log('[HomeScreen] initialTab과 activeTab이 다름, activeTab 업데이트');
+      setActiveTab(initialTab);
+    }
+  }, []);
+
+  // activeTab 변경 시 로그
+  useEffect(() => {
+    console.log('[HomeScreen] activeTab 변경됨:', activeTab);
+  }, [activeTab]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<MapCategory | 'all'>('all');
   const {currentLocation } = useLocation(userData?.userId)

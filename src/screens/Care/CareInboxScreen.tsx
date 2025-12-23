@@ -1,9 +1,9 @@
 /**
  * CareInboxScreen
- * 케어 관리 모드 대화 정리함 화면
+ * 케어 관리 모드 대화 보관함 화면
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getInboxList, deleteConversation, InboxItem } from '../../services/healthChatbot';
@@ -41,28 +42,53 @@ const CareInboxScreen = ({
 
   const loadInboxList = async () => {
     try {
+      console.log('[CareInboxScreen] 보관함 목록 로드 시작', { petId, conversationType: 'care_management' });
       setLoading(true);
+      
       const response = await getInboxList(petId, 'care_management');
+      console.log('[CareInboxScreen] 보관함 목록 API 응답:', response);
 
       if (response.success && response.data?.conversations) {
+        console.log('[CareInboxScreen] ✅ 보관함 목록 로드 성공, 대화 개수:', response.data.conversations.length);
+        console.log('[CareInboxScreen] 대화 목록:', response.data.conversations);
         setInboxList(response.data.conversations);
       } else {
+        console.warn('[CareInboxScreen] ⚠️ 보관함 목록이 비어있거나 응답 형식이 올바르지 않음');
         setInboxList([]);
       }
     } catch (error: any) {
-      console.error('정리함 불러오기 실패:', error);
-      Alert.alert(
-        '오류',
-        error.response?.data?.message || error.message || '정리함을 불러오는데 실패했습니다.'
-      );
+      console.error('[CareInboxScreen] ❌ 보관함 불러오기 실패:', error);
+      console.error('[CareInboxScreen] 에러 상세:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url,
+      });
+      
+      // 404 에러인 경우 특별 처리
+      if (error.response?.status === 404) {
+        console.warn('[CareInboxScreen] 404 에러: API 엔드포인트가 없을 수 있습니다.');
+        Alert.alert(
+          '알림',
+          '보관함 기능이 아직 준비되지 않았습니다. 곧 제공될 예정입니다.'
+        );
+      } else {
+        Alert.alert(
+          '오류',
+          error.response?.data?.message || error.message || '보관함을 불러오는데 실패했습니다.'
+        );
+      }
       setInboxList([]);
     } finally {
       setLoading(false);
+      console.log('[CareInboxScreen] 보관함 목록 로드 완료');
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+  const formatDate = (dateString: string | Date | null | undefined) => {
+    if (!dateString) return '날짜 정보 없음';
+    const date = dateString instanceof Date ? dateString : new Date(dateString);
+    if (isNaN(date.getTime())) return '날짜 정보 없음';
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -144,14 +170,20 @@ const CareInboxScreen = ({
         <TouchableOpacity onPress={onNavigateBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>대화 정리함</Text>
+        <Text style={styles.headerTitle}>대화 보관함</Text>
         <TouchableOpacity
           onPress={handleToggleDeleteMode}
           style={styles.deleteModeButton}
         >
-          <Text style={styles.deleteModeButtonText}>
-            {isDeleteMode ? '취소' : '🗑️'}
-          </Text>
+          {isDeleteMode ? (
+            <Text style={styles.deleteModeButtonText}>취소</Text>
+          ) : (
+            <Image 
+              source={require('../../../ref/archivePage/Trash.png')} 
+              style={styles.trashIcon}
+              resizeMode="contain"
+            />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -167,27 +199,21 @@ const CareInboxScreen = ({
             <Text style={styles.emptyText}>아직 나눈 대화가 없어요!</Text>
           </View>
         ) : (
-          <>
+          <Fragment>
             {inboxList.map((item) => (
-              <TouchableOpacity
-                key={item.conversationId}
+              <View
+                key={item.conversationId || `conversation-${item.startTime || Date.now()}`}
                 style={[
                   styles.card,
                   isDeleteMode && selectedItems.has(item.conversationId) && styles.cardSelected,
                 ]}
-                onPress={() => {
-                  if (isDeleteMode) {
-                    handleToggleSelect(item.conversationId);
-                  } else {
-                    if (onNavigateToDetail) {
-                      onNavigateToDetail(item.conversationId);
-                    }
-                  }
-                }}
-                activeOpacity={0.7}
               >
                 {isDeleteMode && (
-                  <View style={styles.checkboxContainer}>
+                  <TouchableOpacity
+                    style={styles.checkboxContainer}
+                    onPress={() => handleToggleSelect(item.conversationId)}
+                    activeOpacity={0.7}
+                  >
                     <View
                       style={[
                         styles.checkbox,
@@ -198,25 +224,38 @@ const CareInboxScreen = ({
                         <Ionicons name="checkmark" size={16} color="#fff" />
                       )}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 )}
-                <View style={styles.cardContent}>
+                <TouchableOpacity
+                  style={styles.cardContent}
+                  onPress={() => {
+                    if (!isDeleteMode && onNavigateToDetail) {
+                      onNavigateToDetail(item.conversationId);
+                    }
+                  }}
+                  activeOpacity={0.7}
+                  disabled={isDeleteMode}
+                >
                   <View style={styles.cardHeader}>
                     <View style={styles.cardIcon}>
                       <Ionicons name="chatbubble-ellipses-outline" size={20} color="#FF8A3D" />
                     </View>
-                    <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
+                    <Text style={styles.cardDate}>
+                      {formatDate(item.startTime || item.endTime || item.createdAt)}
+                    </Text>
                   </View>
                   <Text style={styles.cardSummary} numberOfLines={3}>
-                    {item.summary || '요약 정보가 없습니다.'}
+                    {typeof item.summary === 'string' 
+                      ? item.summary 
+                      : item.summary?.firstUserMessage || item.summary?.lastAssistantMessage || '요약 정보가 없습니다.'}
                   </Text>
                   {!isDeleteMode && (
                     <View style={styles.cardFooter}>
                       <Ionicons name="chevron-forward" size={16} color="#999" />
                     </View>
                   )}
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
             ))}
             {isDeleteMode && (
               <TouchableOpacity
@@ -234,7 +273,7 @@ const CareInboxScreen = ({
                 )}
               </TouchableOpacity>
             )}
-          </>
+          </Fragment>
         )}
       </ScrollView>
 
@@ -306,9 +345,16 @@ const styles = StyleSheet.create({
     padding: 4,
     minWidth: 32,
     alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   deleteModeButtonText: {
-    fontSize: 20,
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  trashIcon: {
+    width: 24,
+    height: 24,
   },
   content: {
     flex: 1,
@@ -339,34 +385,38 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 0,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: '#E8E8E8',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 1,
+      height: 2,
     },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
+    overflow: 'hidden',
   },
   cardSelected: {
     borderColor: '#FF8A3D',
     borderWidth: 2,
-    backgroundColor: '#FFF5EF',
+    backgroundColor: '#FFF9F5',
   },
   checkboxContainer: {
-    marginRight: 12,
+    padding: 16,
+    paddingRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   checkbox: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: 6,
     borderWidth: 2,
     borderColor: '#D0D0D0',
     justifyContent: 'center',
@@ -379,33 +429,39 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     flex: 1,
+    padding: 16,
+    paddingLeft: 0,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    marginBottom: 10,
   },
   cardIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#FFF5EF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 10,
   },
   cardDate: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#999',
+    fontWeight: '500',
   },
   cardSummary: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#333',
-    lineHeight: 20,
-    marginBottom: 8,
+    lineHeight: 22,
+    marginBottom: 4,
+    fontWeight: '400',
   },
   cardFooter: {
     alignItems: 'flex-end',
+    marginTop: 4,
   },
   deleteButton: {
     backgroundColor: '#FF8A3D',
@@ -413,16 +469,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 16,
+    justifyContent: 'center',
+    marginTop: 20,
     marginBottom: 32,
+    minHeight: 52,
+    shadowColor: '#FF8A3D',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   deleteButtonDisabled: {
     backgroundColor: '#FFD4B8',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   deleteButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   modalOverlay: {
     flex: 1,
