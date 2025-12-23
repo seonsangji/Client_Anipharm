@@ -17,157 +17,164 @@ export const useMapData = () : UseMapDataReturn => {
   const [selectedPharmacy, setSelectedPharmacy] = useState<VeterinaryPharmacy | null>(null);
   const [loading, setLoading] = useState(false);
 
-
-
-const loadPlaces = async (category: MapCategory | 'all', location: LocationCoords | null){
+  const loadPlaces = async (category: MapCategory | 'all', location: LocationCoords | null) => {
     try {
-        setLoading(true)
+      console.log(`[loadPlaces] 호출됨 - category: ${category}, location:`, location);
+      setLoading(true)
 
-        if (category === 'all' && location){
-            const [hospitalResults, pharmacyResult] = await Promise.all([
-                hospitalService.findNearby(location.latitude, location.longitude, 5),
-                pharmacyService.findNearby(location.latitude, location.longitude, 5)
-            ])
+      if (category === 'all' && location){
+        console.log('[loadPlaces] 전체 카테고리 - 병원과 약국 데이터 로딩 시작');
+        const [hospitalResults, pharmacyResult] = await Promise.all([
+          hospitalService.findNearby(location.latitude, location.longitude, 5),
+          pharmacyService.findNearby(location.latitude, location.longitude, 5)
+        ])
 
+        console.log(`[loadPlaces] 병원 ${hospitalResults.length}개, 약국 ${pharmacyResult.length}개 조회 완료`);
         setHospitals(hospitalResults)
         setPharmacies(pharmacyResult)
         setPlaces([])
 
         // 첫 번째 결과 선택
         if(hospitalResults.length > 0){
-            setSelectedHospital(hospitalResults[0])
-            setSelectedPharmacy(null)
-            setSelectedPlace(null)
+          setSelectedHospital(hospitalResults[0])
+          setSelectedPharmacy(null)
+          setSelectedPlace(null)
         }else if (pharmacyResult.length > 0){
-            setSelectedPharmacy(pharmacyResult[0])
-            setSelectedHospital(null)
-            setSelectedPlace(null)
+          setSelectedPharmacy(pharmacyResult[0])
+          setSelectedHospital(null)
+          setSelectedPlace(null)
         }
-    }else if (category === 'hospital' && location ){
+      }else if (category === 'hospital' && location ){
+        console.log('[loadPlaces] 병원 카테고리 - 병원 데이터 로딩 시작');
         const results = await hospitalService.findNearby(location.latitude, location.longitude, 5)
+        console.log(`[loadPlaces] 병원 ${results.length}개 조회 완료`);
         setHospitals(results)
         setPlaces([])
         setPharmacies([])
 
         if(results.length > 0 ){
-            setSelectedHospital(results[0])
-            setSelectedPlace(null)
-            setSelectedPharmacy(null)
+          setSelectedHospital(results[0])
+          setSelectedPlace(null)
+          setSelectedPharmacy(null)
         }
-    }else if (category === 'pharmacy' && location){
+      }else if (category === 'pharmacy' && location){
+        console.log('[loadPlaces] 약국 카테고리 - 약국 데이터 로딩 시작');
         const results = await pharmacyService.findNearby(location.latitude, location.longitude, 5)
+        console.log(`[loadPlaces] 약국 ${results.length}개 조회 완료`);
         setPharmacies(results)
         setHospitals([])
         setPlaces([])
 
         if (results.length > 0 ){
-            setSelectedPharmacy(results[0])
-            setSelectedPlace(null)
-            setSelectedHospital(null)
+          setSelectedPharmacy(results[0])
+          setSelectedPlace(null)
+          setSelectedHospital(null)
         }
-    }
+      }
     }catch(error : any){
-        Alert.alert('error', error.message || '장소를 불러오는 중 오류가 발생했습니다')
+      console.error('[loadPlaces] 에러 발생:', error);
+      Alert.alert('error', error.message || '장소를 불러오는 중 오류가 발생했습니다')
     }finally{
-        setLoading(false)
+      setLoading(false)
     }
-}
-    // 장수 검색
-    const searchPlaces = async (
-        query : string,
-        category : MapCategory,
-        location : LocationCoords | null
-    ) => {
-        try{
-            setLoading(true)
+  }
 
-            const options = location ? {
-                region : query,
-                latitude : location.latitude,
-                longitude : location.longitude,
-                display : 20
-            } : {
-                region : query,
-                display : 20
-            }
+  // 장소 검색
+  const searchPlaces = async (
+    query : string,
+    category : MapCategory,
+    location : LocationCoords | null
+  ) => {
+    try{
+      setLoading(true)
 
-            const results = await mapService.searchByCategory(category, options)
+      const options = location ? {
+        region : query,
+        latitude : location.latitude,
+        longitude : location.longitude,
+        display : 20
+      } : {
+        region : query,
+        display : 20
+      }
 
-            if (category === 'hospital') {
-                const hospitalResults = results.map((place, index) => ({
-                    hospitalId: index + 1,
-                    name: place.name,
-                    address: place.address || place.roadAddress || '',
-                    latitude: place.latitude || 0,
-                    longitude: place.longitude || 0,
-                    is24h: false,
-                    isEmergency: false,
-                    ratingAverage: 0,
-                    reviewCount: 0,
-                }));
+      const results = await mapService.searchByCategory(category, options)
 
-                setHospitals(hospitalResults)
-                setPharmacies([])
-                setPlaces([])
+      if (category === 'hospital') {
+        const hospitalResults = results.map((place, index) => ({
+          hospitalId: index + 1,
+          name: place.name,
+          address: place.address || place.roadAddress || '',
+          latitude: place.latitude || 0,
+          longitude: place.longitude || 0,
+          is24h: false,
+          isEmergency: false,
+          ratingAverage: 0,
+          reviewCount: 0,
+        }));
 
-                if(hospitalResults.length > 0){
-                    setSelectedHospital(hospitalResults[0])
-                    setSelectedPharmacy(null)
-                    setSelectedPlace(null)
-                }
-            } else if (category === 'pharmacy') {
-                const pharmacyResults = results.map((place, index) => ({
-                    pharmacyId: index + 1,
-                    name: place.name,
-                    address: place.address || place.roadAddress || '',
-                    latitude: place.latitude || 0,
-                    longitude: place.longitude || 0,
-                    phone: place.telephone,
-                    isLateNight: false,
-                    ratingAverage: 0,
-                    reviewCount: 0,
-                }));
-
-                setPharmacies(pharmacyResults)
-                setHospitals([])
-                setPlaces([])
-
-                if(pharmacyResults.length > 0){
-                    setSelectedPharmacy(pharmacyResults[0])
-                    setSelectedHospital(null)
-                    setSelectedPlace(null)
-                }
-            }
-        }catch(error : any){
-            Alert.alert('error',error.message || '검색 중 오류가 발생했습니다')
-        }finally{
-            setLoading(false)
-        }
-    }// end searchPlaces
-
-    const clearData = () => {
-        setPlaces([])
-        setHospitals([])
+        setHospitals(hospitalResults)
         setPharmacies([])
-        setSelectedPlace(null)
-        setSelectedHospital(null)
-        setSelectedPharmacy(null)
-    }
+        setPlaces([])
 
-    return {
-        places,
-        hospitals,
-        pharmacies,
-        selectedPlace, 
-        selectedHospital,
-        selectedPharmacy,
-        loading,
-        setSelectedHospital,
-        setSelectedPharmacy,
-        setSelectedPlace,
-        loadPlaces,
-        searchPlaces,
-        clearData
+        if(hospitalResults.length > 0){
+          setSelectedHospital(hospitalResults[0])
+          setSelectedPharmacy(null)
+          setSelectedPlace(null)
+        }
+      } else if (category === 'pharmacy') {
+        const pharmacyResults = results.map((place, index) => ({
+          pharmacyId: index + 1,
+          name: place.name,
+          address: place.address || place.roadAddress || '',
+          latitude: place.latitude || 0,
+          longitude: place.longitude || 0,
+          phone: place.telephone,
+          isLateNight: false,
+          ratingAverage: 0,
+          reviewCount: 0,
+        }));
+
+        setPharmacies(pharmacyResults)
+        setHospitals([])
+        setPlaces([])
+
+        if(pharmacyResults.length > 0){
+          setSelectedPharmacy(pharmacyResults[0])
+          setSelectedHospital(null)
+          setSelectedPlace(null)
+        }
+      }
+    }catch(error : any){
+      Alert.alert('error',error.message || '검색 중 오류가 발생했습니다')
+    }finally{
+      setLoading(false)
     }
+  }// end searchPlaces
+
+  const clearData = () => {
+    setPlaces([])
+    setHospitals([])
+    setPharmacies([])
+    setSelectedPlace(null)
+    setSelectedHospital(null)
+    setSelectedPharmacy(null)
+  }
+
+  return {
+    places,
+    hospitals,
+    pharmacies,
+    selectedPlace,
+    selectedHospital,
+    selectedPharmacy,
+    loading,
+    setSelectedHospital,
+    setSelectedPharmacy,
+    setSelectedPlace,
+    loadPlaces,
+    searchPlaces,
+    clearData
+  }
 
 }// end useMapData
