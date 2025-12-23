@@ -19,7 +19,7 @@ export const useMapData = () : UseMapDataReturn => {
 
 
 
-const loadPlaces = async (category: MapCategory | 'all', location: LocationCoords | null){
+const loadPlaces = async (category: MapCategory | 'all', location: LocationCoords | null) => {
     try {
         setLoading(true)
 
